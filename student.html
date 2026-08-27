@@ -1,0 +1,222 @@
+<!DOCTYPE html><html lang="id"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Dashboard - Sistem Pantauan Siswa</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+        theme: {
+            fontFamily: {
+                sans: ['Inter', 'sans-serif'],
+            }
+        }
+    }
+</script>
+<style>
+    body { font-family: 'Inter', sans-serif; }
+</style>
+</head>
+<body class="bg-slate-50 text-gray-900 min-h-screen antialiased flex overflow-hidden relative">
+<!-- Decorative background elements for glassmorphism effect -->
+<div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-200/40 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-100/40 rounded-full blur-3xl pointer-events-none"></div>
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-full p-6 fixed left-0 top-0 h-screen w-[280px] bg-white/70 backdrop-blur-md border-r border-white/40 shadow-sm z-30">
+<!-- Header -->
+<div class="mb-8 flex flex-col gap-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-semibold text-lg shadow-sm">
+                    SP
+                </div>
+<div>
+<h1 class="text-lg font-semibold text-gray-900 leading-tight">Sistem Pantauan Siswa</h1>
+<p class="text-xs text-gray-500">Educational Portal</p>
+</div>
+</div>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 flex flex-col gap-2 overflow-y-auto">
+<!-- Active Tab: Home -->
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl bg-emerald-500 text-white shadow-md transition-transform duration-150 hover:-translate-y-0.5" href="{{DATA:SCREEN:SCREEN_9}}">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-sm font-medium">Home</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/60 hover:text-gray-900 transition-colors duration-200" href="#presensi">
+<span class="material-symbols-outlined text-[20px]">how_to_reg</span>
+<span class="text-sm font-medium">Presensi &amp; Izin</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/60 hover:text-gray-900 transition-colors duration-200" href="#peminjaman">
+<span class="material-symbols-outlined text-[20px]">business_center</span>
+<span class="text-sm font-medium">Peminjaman Fasilitas</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/60 hover:text-gray-900 transition-colors duration-200" href="#tugas">
+<span class="material-symbols-outlined text-[20px]">assignment</span>
+<span class="text-sm font-medium">Tugas</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/60 hover:text-gray-900 transition-colors duration-200" href="#aduan">
+<span class="material-symbols-outlined text-[20px]">campaign</span>
+<span class="text-sm font-medium">Aduan</span>
+</a>
+</div>
+<!-- CTA & Footer -->
+<div class="mt-auto flex flex-col gap-2 pt-6 border-t border-gray-100/50">
+<a class="w-full bg-emerald-50 text-emerald-600 text-sm font-medium py-2 px-4 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors" href="#report"><span class="material-symbols-outlined text-[18px]">report</span>Report Issue</a>
+<div class="flex flex-col gap-1 mt-2">
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/60 hover:text-gray-900 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">account_circle</span>
+<span class="text-sm font-medium">Profile</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/60 hover:text-gray-900 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50/50 transition-colors duration-200" href="/"><span class="material-symbols-outlined text-[20px]">logout</span><span class="text-sm font-medium">Keluar</span></a></div>
+</div>
+</nav>
+<!-- Main Content Area Wrapper -->
+<div class="flex-1 md:ml-[280px] h-screen overflow-y-auto flex flex-col relative z-10">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-20 bg-white/40 backdrop-blur-md w-full h-20 flex justify-between items-center px-8 border-b border-white/40">
+<div class="flex flex-col">
+<h2 class="text-xl font-semibold text-gray-900 leading-tight hidden md:block">Selamat Datang, Ahmad Fauzi</h2>
+<span class="text-sm text-gray-500 hidden md:block">Senin, 24 Mei 2024</span>
+<!-- Mobile Only Title -->
+<h2 class="text-xl font-semibold text-gray-900 md:hidden">SPS</h2>
+</div>
+<div class="flex items-center gap-6">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-white/60 transition-colors relative">
+<span class="material-symbols-outlined text-[24px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-emerald-500 rounded-full border border-white"></span>
+</button>
+<img alt="Ahmad Fauzi" class="w-10 h-10 rounded-full object-cover border-2 border-white/60 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDS1luYddz1mVMGHxuEEXB6DBjbHU6lgPvk0MkO50HFC_PNMBlxxmu344kt-By-kU8LnOCLQzPywCH5Jz-PD7LsKWtL4d22HDRHWZZeD04xhaAwa0BWjcD3WN0-D3FpM7zVK7ULMguB10nd4V1bSZwj57pkn9p3j-gu-i4CNvkJdyiET43ZyRkCI8qQnINjW3PVrWyq_WRtjjuKVuXQ-_pGZe968Mg6kAkl5gO3nkfKRSEu0pRme4Qh">
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 p-6 md:p-8 max-w-[1440px] mx-auto w-full flex flex-col gap-8">
+<!-- Hero Widget: Presensi Terpadu -->
+<section class="bg-white/70 backdrop-blur-md border border-white/40 shadow-sm rounded-2xl overflow-hidden relative group">
+<div class="relative p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+<div class="flex-1 flex flex-col gap-3">
+<div class="flex items-center gap-2 text-emerald-600 text-xs font-semibold tracking-wider uppercase">
+<span class="material-symbols-outlined text-[16px]">how_to_reg</span>
+                            Presensi Terpadu
+                        </div>
+<h3 class="text-3xl font-semibold text-gray-900 tracking-tight">Status Hari Ini: Belum Hadir</h3>
+<p class="text-sm text-gray-500 max-w-md leading-relaxed">Silakan lakukan presensi kedatangan untuk mencatat kehadiran Anda pada sistem.</p>
+<div class="mt-6 flex flex-wrap items-center gap-4">
+<button class="bg-emerald-500 text-white rounded-xl px-6 py-3 text-sm font-medium transition-all duration-300 hover:bg-emerald-600 hover:shadow-lg hover:-translate-y-1 active:scale-95 flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">fingerprint</span>
+                                Check-In Sekarang
+                            </button>
+<button class="bg-white/50 border border-emerald-100 text-emerald-700 text-sm font-medium px-5 py-3 rounded-xl hover:bg-emerald-50 hover:border-emerald-200 transition-colors">
+                                Ajukan Izin/Sakit
+                            </button>
+<button class="bg-white/30 border border-gray-200 text-gray-600 text-sm font-medium px-5 py-3 rounded-xl hover:bg-white/60 hover:text-gray-900 transition-colors">
+                                Dispensasi
+                            </button>
+</div>
+</div>
+<div class="bg-white/50 backdrop-blur-sm p-8 rounded-2xl border border-white/60 flex flex-col items-center justify-center min-w-[180px] shadow-sm shrink-0">
+<span class="text-xs text-gray-500 font-medium mb-2 uppercase tracking-wider">Waktu Saat Ini</span>
+<div class="text-4xl font-semibold text-gray-900 tracking-tight" id="clock-display">19:48</div>
+<span class="text-sm text-emerald-500 font-medium mt-1">WIB</span>
+</div>
+</div>
+</section>
+<!-- Grid Section (3 Columns) -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Column 1: Tugas Aktif -->
+<div class="bg-white/70 backdrop-blur-md border border-white/40 shadow-sm rounded-2xl p-6 flex flex-col gap-6">
+<div class="flex items-center justify-between border-b border-gray-100 pb-4">
+<h4 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-amber-500">assignment</span>
+                            Tugas Aktif
+                        </h4>
+<a class="text-xs font-medium text-emerald-500 hover:text-emerald-600 transition-colors" href="#">Lihat Semua</a>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Assignment 1 -->
+<div class="pb-3 border-b border-gray-100/50 hover:bg-white/40 -mx-2 px-2 py-2 rounded-xl transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-1.5">
+<span class="text-sm font-medium text-gray-900 group-hover:text-emerald-600 transition-colors">Matematika - Aljabar</span>
+<span class="bg-red-50 text-red-600 text-[10px] font-semibold px-2.5 py-1 rounded-md whitespace-nowrap">Due: 2 Hari</span>
+</div>
+<p class="text-xs text-gray-500 leading-relaxed">Latihan soal halaman 45-50. Kumpulkan di loker guru.</p>
+</div>
+<!-- Assignment 2 -->
+<div class="pb-3 border-b border-gray-100/50 hover:bg-white/40 -mx-2 px-2 py-2 rounded-xl transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-1.5">
+<span class="text-sm font-medium text-gray-900 group-hover:text-emerald-600 transition-colors">Bahasa Inggris - Essay</span>
+<span class="bg-amber-50 text-amber-600 text-[10px] font-semibold px-2.5 py-1 rounded-md whitespace-nowrap">Due: Besok</span>
+</div>
+<p class="text-xs text-gray-500 leading-relaxed">Tulis essay 500 kata tentang "My Future Career". Upload PDF.</p>
+</div>
+</div>
+</div>
+<!-- Column 2: Status Izin -->
+<div class="bg-white/70 backdrop-blur-md border border-white/40 shadow-sm rounded-2xl p-6 flex flex-col gap-6">
+<div class="flex items-center justify-between border-b border-gray-100 pb-4">
+<h4 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-blue-500">medical_services</span>
+                            Status Pengajuan Izin
+                        </h4>
+</div>
+<div class="flex-1 flex flex-col justify-center py-4">
+<div class="bg-white/40 rounded-2xl p-6 border border-white/60 text-center relative overflow-hidden shadow-sm">
+<div class="w-14 h-14 bg-white text-emerald-500 rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4">
+<span class="material-symbols-outlined text-[28px]">pending_actions</span>
+</div>
+<h5 class="text-sm font-semibold text-gray-900 mb-1.5">Izin Sakit - 22 Mei</h5>
+<p class="text-xs text-gray-500 mb-4">Surat keterangan dokter telah diunggah.</p>
+<div class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-600 text-[11px] font-semibold px-3 py-1.5 rounded-lg">
+<span class="material-symbols-outlined text-[14px]">hourglass_empty</span>
+                                Pending Validation
+                            </div>
+</div>
+</div>
+</div>
+<!-- Column 3: Fasilitas -->
+<div class="bg-white/70 backdrop-blur-md border border-white/40 shadow-sm rounded-2xl p-6 flex flex-col gap-6">
+<div class="flex items-center justify-between border-b border-gray-100 pb-4">
+<h4 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-emerald-500">business_center</span>
+                            Peminjaman Aktif
+                        </h4>
+</div>
+<div class="flex-1 flex flex-col justify-center py-4">
+<div class="bg-white/40 rounded-2xl p-6 border border-white/60 relative overflow-hidden shadow-sm">
+<div class="absolute -right-4 -top-4 w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-[32px] text-emerald-200">videocam</span>
+</div>
+<div class="relative z-10">
+<h5 class="text-sm font-semibold text-gray-900 mb-1.5">Proyektor Mini (Ruang 4)</h5>
+<p class="text-xs text-gray-500 mb-6">Dipinjam untuk presentasi Sejarah.</p>
+<div class="bg-white/80 backdrop-blur-sm border border-gray-100 rounded-xl p-3 flex flex-col gap-1.5">
+<span class="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Batas Pengembalian</span>
+<span class="text-sm font-semibold text-red-500 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+                                        16:00 WIB
+                                    </span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Simple clock script -->
+<script>
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const el = document.getElementById('clock-display');
+            if(el) el.textContent = `${hours}:${minutes}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+    </script>
+</body></html>
