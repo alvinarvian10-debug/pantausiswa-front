@@ -50,22 +50,24 @@ export default function StaggerGroup({
   const shouldReduceMotion = useReducedMotion();
 
   const container: Variants = {
-    hidden: {},
-    show: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
       transition: {
         staggerChildren: shouldReduceMotion ? 0 : stagger,
+        delayChildren: shouldReduceMotion ? 0 : 0.1,
       },
     },
   };
 
   const item: Variants = {
     hidden: shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 },
-    show: {
+    visible: {
       opacity: 1,
       y: 0,
       transition: shouldReduceMotion
         ? { duration: 0.4, ease: 'easeOut' }
-        : { type: 'spring', stiffness: 100, damping: 20 },
+        : { duration: 0.6, ease: 'easeOut' },
     },
   };
 
@@ -77,8 +79,7 @@ export default function StaggerGroup({
       className={className}
       variants={container}
       initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: '-64px' }}
+      animate="visible"
       {...rest}
     >
       {Children.map(children, (child) =>

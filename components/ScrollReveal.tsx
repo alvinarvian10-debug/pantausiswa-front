@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import { ReactNode } from 'react';
 
 interface ScrollRevealProps {
@@ -15,10 +15,10 @@ interface ScrollRevealProps {
 }
 
 /**
- * Accessibility-aware scroll-reveal.
+ * Accessibility-aware reveal-on-mount.
  *
- * - Default: subtle slide-up (opacity 0→1, y 20→0) with a smooth spring,
- *   triggered once when the element enters the viewport.
+ * - Default: subtle slide-up (opacity 0→1, y 20→0) with a smooth ease-out,
+ *   played once when the component first mounts (i.e. on initial page load).
  * - `prefers-reduced-motion`: translate movement is disabled and only a
  *   simple opacity fade plays, honoring the user's OS-level setting via
  *   Framer Motion's `useReducedMotion()`.
@@ -30,17 +30,23 @@ export default function ScrollReveal({
 }: ScrollRevealProps) {
   const shouldReduceMotion = useReducedMotion();
 
+  const variants: Variants = {
+    hidden: shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: shouldReduceMotion
+        ? { duration: 0.4, ease: 'easeOut', delay }
+        : { duration: 0.6, ease: 'easeOut', delay },
+    },
+  };
+
   return (
     <motion.div
       className={className}
-      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
-      whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-64px' }}
-      transition={
-        shouldReduceMotion
-          ? { duration: 0.4, ease: 'easeOut', delay }
-          : { type: 'spring', stiffness: 100, damping: 20, delay }
-      }
+      variants={variants}
+      initial="hidden"
+      animate="visible"
     >
       {children}
     </motion.div>
