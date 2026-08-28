@@ -37,7 +37,7 @@ export default function StudentDashboard() {
                 <span className="material-symbols-outlined icon-fill text-[18px]">
                   how_to_reg
                 </span>
-                Presensi Terpadu
+                Akses Cepat
               </div>
               <h3 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
                 Status Hari Ini:{' '}
@@ -48,18 +48,27 @@ export default function StudentDashboard() {
                 Anda pada sistem.
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <button className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95">
+                <Link
+                  href="/dashboard/student/presensi"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                >
                   <span className="material-symbols-outlined icon-fill text-[20px]">
                     fingerprint
                   </span>
                   Check-In Sekarang
-                </button>
-                <button className="rounded-xl border border-emerald-200/70 bg-white/60 px-5 py-3 text-sm font-medium text-emerald-700 transition-colors hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50">
-                  Ajukan Izin/Sakit
-                </button>
-                <button className="rounded-xl border border-gray-200 bg-white/40 px-5 py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-white/80 hover:text-gray-900">
-                  Dispensasi
-                </button>
+                </Link>
+                <Link
+                  href="/dashboard/student/peminjaman"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                >
+                  peminjaman Fasilitas
+                </Link>
+                <Link
+                  href="/dashboard/student/tugas"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                >
+                  tugas
+                </Link>
               </div>
             </div>
 
@@ -153,7 +162,7 @@ export default function StudentDashboard() {
               <span className="material-symbols-outlined icon-fill text-[20px] text-blue-500">
                 medical_services
               </span>
-              Status Pengajuan Izin
+              Status Pengajuan izin
             </h4>
           </div>
           <div className="flex flex-1 items-center py-4">
@@ -173,7 +182,7 @@ export default function StudentDashboard() {
                 <span className="material-symbols-outlined icon-fill text-[14px]">
                   hourglass_empty
                 </span>
-                Menunggu Validasi
+                Menunggu Validas
               </span>
             </div>
           </div>
@@ -181,13 +190,19 @@ export default function StudentDashboard() {
 
         {/* Peminjaman Aktif */}
         <GlassCard className="flex h-full flex-col p-6">
-          <div className="flex items-center border-b border-gray-100 pb-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <h4 className="flex items-center gap-2 text-base font-semibold text-gray-900">
               <span className="material-symbols-outlined icon-fill text-[20px] text-emerald-500">
                 business_center
               </span>
               Peminjaman Aktif
             </h4>
+            <Link
+              className="rounded-md text-xs font-semibold text-emerald-600 transition-colors hover:text-emerald-700"
+              href="/dashboard/student/peminjaman"
+            >
+              Lihat Semua
+            </Link>
           </div>
           <div className="flex flex-1 items-center py-4">
             <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 shadow-glass">
