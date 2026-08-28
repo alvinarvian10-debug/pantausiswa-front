@@ -6,6 +6,7 @@ import ParallaxLayer from '../components/ParallaxLayer';
 import AnimatedCounter from '../components/AnimatedCounter';
 import StaggerGroup from '../components/StaggerGroup';
 import RoleShowcase from '../components/RoleShowcase';
+import ShowcaseCarousel from '../components/ShowcaseCarousel';
 
 const FEATURES = [
   {
@@ -147,6 +148,9 @@ export default function BerandaPage() {
           </div>
         </section>
 
+        {/* ============ Showcase Carousel ============ */}
+        <ShowcaseCarousel />
+
         {/* ============ Features ============ */}
         <section
           className="border-y border-gray-100 bg-slate-50/70 px-6 py-24"
@@ -173,22 +177,32 @@ export default function BerandaPage() {
               {FEATURES.map((feature) => (
                 <article
                   key={feature.title}
-                  className="group flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-glass-lg"
+                  className="flex h-full rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/10"
                 >
-                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500 transition-all duration-300 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-cta">
-                    <span className="material-symbols-outlined icon-fill text-[28px]">
-                      {feature.icon}
-                    </span>
-                  </div>
-                  <h3 className="mb-3 text-lg font-semibold text-gray-900">
-                    {feature.title}
-                  </h3>
-                  <p className="flex-1 text-sm leading-relaxed text-gray-500">
-                    {feature.description}
-                  </p>
-                  <span className="mt-6 inline-flex w-max items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
-                    {feature.tag}
-                  </span>
+                  <Link className="group block h-full" href="/login">
+                    <div className="flex h-full flex-col p-8">
+                      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500 transition-all duration-300 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-cta">
+                        <span className="material-symbols-outlined icon-fill text-[28px]">
+                          {feature.icon}
+                        </span>
+                      </div>
+                      <h3 className="mb-3 text-lg font-semibold text-gray-900">
+                        {feature.title}
+                      </h3>
+                      <p className="flex-1 text-sm leading-relaxed text-gray-500">
+                        {feature.description}
+                      </p>
+                      <span className="mt-6 inline-flex w-max items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
+                        {feature.tag}
+                      </span>
+                      <div className="mt-4 flex items-center text-sm font-medium text-emerald-600">
+                        Coba Fitur{' '}
+                        <span className="ml-1 transition-transform duration-300 group-hover:translate-x-1">
+                          &rarr;
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
                 </article>
               ))}
             </StaggerGroup>
