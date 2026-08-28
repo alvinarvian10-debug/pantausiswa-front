@@ -1,6 +1,3 @@
-'use client';
-
-import { motion, type Variants } from 'framer-motion';
 import Link from 'next/link';
 import SiteHeader from '../components/SiteHeader';
 import HeroMockup from '../components/HeroMockup';
@@ -9,27 +6,6 @@ import ParallaxLayer from '../components/ParallaxLayer';
 import AnimatedCounter from '../components/AnimatedCounter';
 import StaggerGroup from '../components/StaggerGroup';
 import RoleShowcase from '../components/RoleShowcase';
-import ShowcaseCarousel from '../components/ShowcaseCarousel';
-
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.15,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.6, ease: 'easeOut' },
-  },
-};
 
 const FEATURES = [
   {
@@ -86,20 +62,12 @@ const STATS = [
 export default function BerandaPage() {
   return (
     <SmoothScrollProvider>
-    <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-white text-gray-600">
+    <div className="flex min-h-screen flex-col bg-white text-gray-600">
       <SiteHeader />
 
-      <motion.main
-        className="flex-grow"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
+      <main className="flex-grow">
         {/* ============ Hero ============ */}
-        <motion.section
-          className="relative overflow-hidden px-4 pt-12 pb-16 md:px-8 md:pt-24 md:pb-32"
-          variants={itemVariants}
-        >
+        <section className="relative overflow-hidden px-6 pb-24 pt-16 md:pb-32 md:pt-24">
           <ParallaxLayer
             aria-hidden="true"
             offset={50}
@@ -118,7 +86,7 @@ export default function BerandaPage() {
               itemClassName=""
               stagger={0.12}
             >
-              <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-gray-900 sm:text-5xl md:text-6xl lg:text-7xl">
+              <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-gray-900 sm:text-5xl xl:text-6xl">
                 Transformasi Digital{' '}
                 <span className="relative whitespace-nowrap text-emerald-600">
                   Manajemen Sekolah
@@ -177,28 +145,19 @@ export default function BerandaPage() {
             {/* CSS-built dashboard mockup */}
             <HeroMockup />
           </div>
-        </motion.section>
-
-        {/* ============ Showcase Carousel ============ */}
-        <motion.section
-          className="px-4 my-12 md:px-8 md:my-16"
-          variants={itemVariants}
-        >
-          <ShowcaseCarousel />
-        </motion.section>
+        </section>
 
         {/* ============ Features ============ */}
-        <motion.section
-          className="border-y border-gray-100 bg-slate-50/70 px-4 py-14 md:px-8 md:py-24"
+        <section
+          className="border-y border-gray-100 bg-slate-50/70 px-6 py-24"
           id="fitur"
-          variants={itemVariants}
         >
           <div className="mx-auto max-w-7xl">
-              <div className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
+            <div className="mx-auto mb-16 max-w-2xl text-center">
               <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-emerald-600">
                 Fitur Unggulan
               </p>
-              <h2 className="mb-4 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-5xl">
+              <h2 className="mb-4 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
                 Semua Kebutuhan Sekolah, Satu Platform
               </h2>
               <p className="text-lg leading-relaxed text-gray-500">
@@ -214,54 +173,39 @@ export default function BerandaPage() {
               {FEATURES.map((feature) => (
                 <article
                   key={feature.title}
-                  className="group flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/10"
+                  className="group flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-glass-lg"
                 >
-                  <Link
-                    className="group block h-full"
-                    href="/login"
-                  >
-                    <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500 transition-all duration-300 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-cta">
-                      <span className="material-symbols-outlined icon-fill text-[28px]">
-                        {feature.icon}
-                      </span>
-                    </div>
-                    <h3 className="mb-3 text-lg font-semibold text-gray-900">
-                      {feature.title}
-                    </h3>
-                    <p className="flex-1 text-sm leading-relaxed text-gray-500">
-                      {feature.description}
-                    </p>
-                    <span className="mt-6 inline-flex w-max items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
-                      {feature.tag}
+                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500 transition-all duration-300 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-cta">
+                    <span className="material-symbols-outlined icon-fill text-[28px]">
+                      {feature.icon}
                     </span>
-                    <span className="mt-4 text-sm font-medium text-emerald-600 flex items-center gap-1">
-                      Coba Fitur{' '}
-                      <span className="transition-transform duration-300 group-hover:translate-x-1">
-                        &rarr;
-                      </span>
-                    </span>
-                  </Link>
+                  </div>
+                  <h3 className="mb-3 text-lg font-semibold text-gray-900">
+                    {feature.title}
+                  </h3>
+                  <p className="flex-1 text-sm leading-relaxed text-gray-500">
+                    {feature.description}
+                  </p>
+                  <span className="mt-6 inline-flex w-max items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
+                    {feature.tag}
+                  </span>
                 </article>
               ))}
             </StaggerGroup>
           </div>
-        </motion.section>
+        </section>
 
         {/* ============ Role Showcase (pinned scroll story) ============ */}
         <RoleShowcase />
 
         {/* ============ About ============ */}
-        <motion.section
-          className="px-4 py-14 md:px-8 md:py-24"
-          id="tentang"
-          variants={itemVariants}
-        >
+        <section className="px-6 py-24" id="tentang">
           <div className="mx-auto grid w-full max-w-7xl items-center gap-16 lg:grid-cols-2">
             <div className="order-2 flex flex-col gap-6 lg:order-1">
               <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600">
                 Tentang Kami
               </p>
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-5xl">
+              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
                 Dibangun untuk Ekosistem Pendidikan Indonesia
               </h2>
               <p className="text-lg leading-relaxed text-gray-500">
@@ -335,13 +279,10 @@ export default function BerandaPage() {
               </div>
             </div>
           </div>
-        </motion.section>
+        </section>
 
         {/* ============ Stats ============ */}
-        <motion.section
-          className="px-4 pb-14 md:px-8 md:pb-24"
-          variants={itemVariants}
-        >
+        <section className="px-6 pb-24">
           <StaggerGroup
             className="mx-auto grid w-full max-w-7xl grid-cols-2 gap-6 lg:grid-cols-4"
             stagger={0.12}
@@ -360,14 +301,11 @@ export default function BerandaPage() {
               </div>
             ))}
           </StaggerGroup>
-        </motion.section>
+        </section>
 
         {/* ============ CTA band ============ */}
-        <motion.section
-          className="px-4 pb-14 md:px-8 md:pb-24"
-          variants={itemVariants}
-        >
-          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 px-6 py-12 text-center shadow-cta-lg sm:px-12 md:px-16 md:py-16">
+        <section className="px-6 pb-24">
+          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 px-8 py-16 text-center shadow-cta-lg sm:px-16">
             <ParallaxLayer
               aria-hidden="true"
               offset={35}
@@ -378,9 +316,9 @@ export default function BerandaPage() {
               offset={45}
               className="pointer-events-none absolute -bottom-20 -right-10 h-72 w-72 rounded-full bg-emerald-300/30 blur-3xl"
             />
-              <h2 className="relative mb-4 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
-                Siap Membawa Sekolah Anda ke Level Berikutnya?
-              </h2>
+            <h2 className="relative mb-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Siap Membawa Sekolah Anda ke Level Berikutnya?
+            </h2>
             <p className="relative mx-auto mb-8 max-w-xl text-lg text-emerald-50/90">
               Bergabunglah dengan ratusan sekolah yang telah menyederhanakan
               operasional harian mereka bersama PantauSiswa.
@@ -395,11 +333,11 @@ export default function BerandaPage() {
               </span>
             </Link>
           </div>
-        </motion.section>
-      </motion.main>
+        </section>
+      </main>
 
       {/* ============ Footer ============ */}
-      <footer className="border-t border-gray-100 bg-slate-50/70 px-4 py-10 md:px-8 md:py-12">
+      <footer className="border-t border-gray-100 bg-slate-50/70 px-6 py-12">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-8 md:flex-row">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white">
