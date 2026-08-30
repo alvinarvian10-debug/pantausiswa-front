@@ -1,36 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../components/GlassCard';
 import Avatar from '../../../components/Avatar';
 import ScrollReveal from '../../../components/ScrollReveal';
 import StaggerGroup from '../../../components/StaggerGroup';
 import AnimatedCounter from '../../../components/AnimatedCounter';
-
-const REQUESTS = [
-  {
-    name: 'Ahmad Faisal',
-    tone: 'emerald' as const,
-    tag: 'Sakit — Demam',
-    tagClass: 'bg-orange-50 text-orange-600 ring-orange-100',
-    meta: 'Hari ini',
-    linkLabel: 'Lihat Surat Dokter',
-    linkIcon: 'description',
-  },
-  {
-    name: 'Siti Nurhaliza',
-    tone: 'slate' as const,
-    tag: 'Izin — Keluarga',
-    tagClass: 'bg-blue-50 text-blue-600 ring-blue-100',
-    meta: 'Besok',
-    linkLabel: 'Lihat Pesan Wali',
-    linkIcon: 'chat',
-  },
-];
+import { CURRENT_GURU_ID, useAppData } from '../../../lib/store';
 
 export default function GuruDashboard() {
   const [today, setToday] = useState('');
+  const { kelas, siswa, presensi, izin, submisi, tugas, guru, getSiswa } = useAppData();
 
   useEffect(() => {
     setToday(
@@ -43,13 +24,41 @@ export default function GuruDashboard() {
     );
   }, []);
 
+  const myKelas = useMemo(() => kelas.filter((k) => k.waliKelasId === CURRENT_GURU_ID), [kelas]);
+  const me = guru.find((g) => g.id === CURRENT_GURU_ID);
+  const primaryKelas = myKelas[0] ?? null;
+  const todayDate = new Date().toISOString().slice(0, 10);
+
+  const roster = useMemo(() => {
+    if (!primaryKelas) return [];
+    return siswa
+      .filter((s) => s.kelasId === primaryKelas.id)
+      .map((s) => {
+        const record = presensi.find((p) => p.siswaId === s.id && p.tanggal === todayDate);
+        return { siswa: s, status: record?.status ?? null, waktu: record?.waktu ?? null, keterangan: record?.keterangan ?? '-' };
+      });
+  }, [primaryKelas, siswa, presensi, todayDate]);
+
+  const hadirCount = roster.filter((r) => r.status === 'Hadir').length;
+  const persenHadir = roster.length > 0 ? Math.round((hadirCount / roster.length) * 100) : 0;
+
+  const pendingIzin = useMemo(
+    () => izin.filter((i) => myKelas.some((k) => k.id === i.kelasId) && i.status === 'Menunggu'),
+    [izin, myKelas],
+  );
+
+  const tugasPerluDinilai = useMemo(
+    () => submisi.filter((s) => s.status === 'Menunggu Nilai' && tugas.some((t) => t.id === s.tugasId && t.guruId === CURRENT_GURU_ID)).length,
+    [submisi, tugas],
+  );
+
   return (
     <main className="mx-auto flex w-full max-w-content flex-1 flex-col gap-8 p-4 sm:p-6 md:p-10">
       {/* Greeting */}
       <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
         <div>
           <h1 className="mb-2 text-3xl font-bold leading-tight tracking-tight text-gray-900 md:text-4xl">
-            Selamat Datang, <span className="text-emerald-600">Bapak Budi</span>
+            Selamat Datang, <span className="text-emerald-600">{me?.nama ?? 'Guru'}</span>
           </h1>
           <p className="flex items-center gap-2 text-base text-gray-500">
             <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-500">
@@ -58,10 +67,13 @@ export default function GuruDashboard() {
             {today || '\u00A0'}
           </p>
         </div>
-        <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95 md:self-auto">
+        <Link
+          href="/dashboard/guru/kelola-tugas"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95 md:self-auto"
+        >
           <span className="material-symbols-outlined text-[20px]">add</span>
-          Catatan Baru
-        </button>
+          Beri Tugas Baru
+        </Link>
       </div>
 
       {/* Quick Stats */}
@@ -87,21 +99,21 @@ export default function GuruDashboard() {
             </p>
             <p className="flex items-baseline gap-2">
               <span className="text-4xl font-bold tracking-tight text-gray-900">
-                <AnimatedCounter value={32} suffix="/35" />
+                <AnimatedCounter value={hadirCount} suffix={`/${roster.length}`} />
               </span>
               <span className="text-sm text-gray-400">siswa hadir</span>
             </p>
             <div
               className="mt-5 h-2 w-full overflow-hidden rounded-full bg-gray-100"
               role="progressbar"
-              aria-valuenow={91}
+              aria-valuenow={persenHadir}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-label="Persentase kehadiran kelas"
             >
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500"
-                style={{ width: '91%' }}
+                style={{ width: `${persenHadir}%` }}
               />
             </div>
           </div>
@@ -126,7 +138,7 @@ export default function GuruDashboard() {
             </p>
             <p className="flex items-baseline gap-2">
               <span className="text-4xl font-bold tracking-tight text-gray-900">
-                <AnimatedCounter value={3} />
+                <AnimatedCounter value={pendingIzin.length} />
               </span>
               <span className="text-sm text-gray-400">pengajuan izin</span>
             </p>
@@ -145,7 +157,7 @@ export default function GuruDashboard() {
           </p>
           <p className="flex items-baseline gap-2">
             <span className="text-4xl font-bold tracking-tight text-gray-900">
-              <AnimatedCounter value={12} />
+              <AnimatedCounter value={tugasPerluDinilai} />
             </span>
             <span className="text-sm text-gray-400">dokumen</span>
           </p>
@@ -178,9 +190,11 @@ export default function GuruDashboard() {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <h2 className="flex items-center gap-3 text-xl font-bold tracking-tight text-gray-900">
             Persetujuan Izin &amp; Dispensasi
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
-              3 Baru
-            </span>
+            {pendingIzin.length > 0 && (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
+                {pendingIzin.length} Baru
+              </span>
+            )}
           </h2>
           <Link
             className="text-sm font-semibold text-emerald-600 hover:text-emerald-700"
@@ -191,138 +205,85 @@ export default function GuruDashboard() {
         </div>
 
         <StaggerGroup as="div" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {REQUESTS.map((req) => (
-            <GlassCard
-              key={req.name}
-              className="flex h-full flex-col items-start gap-5 p-6 sm:flex-row sm:items-center"
-            >
-              <Avatar
-                name={req.name}
-                tone={req.tone}
-                className="h-14 w-14 rounded-2xl text-lg"
-              />
-              <div className="min-w-0 flex-1">
-                <h4 className="truncate text-base font-semibold text-gray-900">
-                  {req.name}
-                </h4>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${req.tagClass}`}
-                  >
-                    {req.tag}
-                  </span>
-                  <span className="flex items-center gap-1 text-sm text-gray-400">
-                    <span className="material-symbols-outlined text-[16px]">
-                      schedule
+          {pendingIzin.slice(0, 4).map((req) => {
+            const s = getSiswa(req.siswaId);
+            return (
+              <GlassCard
+                key={req.id}
+                className="flex h-full flex-col items-start gap-5 p-6 sm:flex-row sm:items-center"
+              >
+                <Avatar
+                  name={s?.nama ?? '?'}
+                  tone={s?.tone}
+                  className="h-14 w-14 rounded-2xl text-lg"
+                />
+                <div className="min-w-0 flex-1">
+                  <h4 className="truncate text-base font-semibold text-gray-900">
+                    {s?.nama ?? 'Siswa tidak ditemukan'}
+                  </h4>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600 ring-1 ring-inset ring-orange-100">
+                      {req.jenis} — {req.alasan.length > 24 ? `${req.alasan.slice(0, 24)}…` : req.alasan}
                     </span>
-                    {req.meta}
-                  </span>
+                    <span className="flex items-center gap-1 text-sm text-gray-400">
+                      <span className="material-symbols-outlined text-[16px]">schedule</span>
+                      {req.tanggalMulai}
+                    </span>
+                  </div>
                 </div>
                 <Link
-                  className="group mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700"
                   href="/dashboard/guru/persetujuan-izin"
+                  className="flex w-full gap-3 sm:mt-0 sm:w-auto sm:flex-col"
                 >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {req.linkIcon}
-                  </span>
-                  {req.linkLabel}
-                  <span className="material-symbols-outlined text-[14px] opacity-0 transition-opacity group-hover:opacity-100">
-                    open_in_new
+                  <span className="flex-1 rounded-xl bg-emerald-500 px-5 py-2 text-center text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95 sm:flex-none">
+                    Tinjau
                   </span>
                 </Link>
-              </div>
-              <div className="flex w-full gap-3 sm:mt-0 sm:w-auto sm:flex-col">
-                <button className="flex-1 rounded-xl bg-emerald-500 px-5 py-2 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95 sm:flex-none">
-                  Setujui
-                </button>
-                <button className="flex-1 rounded-xl border border-gray-200 bg-white/60 px-5 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95 sm:flex-none">
-                  Tolak
-                </button>
-              </div>
-            </GlassCard>
-          ))}
+              </GlassCard>
+            );
+          })}
+          {pendingIzin.length === 0 && (
+            <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white py-10 text-center text-sm text-gray-400">
+              Tidak ada pengajuan izin yang menunggu saat ini.
+            </div>
+          )}
         </StaggerGroup>
       </section>
 
       {/* Rekap Kehadiran */}
-      <AttendanceTable />
+      <AttendanceTable roster={roster} kelasNama={primaryKelas?.nama ?? '-'} />
     </main>
   );
 }
 
-const ROWS = [
-  {
-    name: 'Andi Saputra',
-    tone: 'emerald' as const,
-    checkIn: '06:45',
-    status: 'Hadir',
-    statusClass: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
-    dotClass: 'bg-emerald-500',
-    note: '-',
-  },
-  {
-    name: 'Bima Arya',
-    tone: 'amber' as const,
-    checkIn: '07:15',
-    status: 'Terlambat',
-    statusClass: 'bg-amber-50 text-amber-600 ring-amber-100',
-    dotClass: 'bg-amber-500',
-    note: 'Macet di perjalanan',
-  },
-  {
-    name: 'Citra Lestari',
-    tone: 'red' as const,
-    checkIn: null,
-    status: 'Alpa',
-    statusClass: 'bg-red-50 text-red-600 ring-red-100',
-    dotClass: 'bg-red-500',
-    note: 'Belum ada keterangan',
-    contact: true,
-  },
-  {
-    name: 'Diana Putri',
-    tone: 'blue' as const,
-    checkIn: null,
-    status: 'Sakit',
-    statusClass: 'bg-blue-50 text-blue-600 ring-blue-100',
-    dotClass: 'bg-blue-500',
-    note: 'Surat dokter terlampir',
-    attachment: true,
-  },
-];
+interface RosterRow {
+  siswa: { id: string; nama: string; tone: import('../../../lib/store').AvatarTone };
+  status: string | null;
+  waktu: string | null;
+  keterangan: string;
+}
 
-function AttendanceTable() {
+const STATUS_STYLE: Record<string, { chip: string; dot: string }> = {
+  Hadir: { chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100', dot: 'bg-emerald-500' },
+  Sakit: { chip: 'bg-blue-50 text-blue-600 ring-blue-100', dot: 'bg-blue-500' },
+  Izin: { chip: 'bg-amber-50 text-amber-600 ring-amber-100', dot: 'bg-amber-500' },
+  Alpa: { chip: 'bg-red-50 text-red-600 ring-red-100', dot: 'bg-red-500' },
+};
+
+function AttendanceTable({ roster, kelasNama }: { roster: RosterRow[]; kelasNama: string }) {
   return (
     <ScrollReveal delay={0.15}>
       <GlassCard className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 bg-white/60 px-6 py-5 sm:px-8">
           <h2 className="text-lg font-bold tracking-tight text-gray-900">
-            Rekap Kehadiran Live — Kelas 10 MIPA 1
+            Rekap Kehadiran Live — {kelasNama}
           </h2>
-          <div className="flex gap-2">
-            <button
-              aria-label="Filter data"
-              className="rounded-xl border border-gray-200 p-2.5 text-gray-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600"
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                filter_list
-              </span>
-            </button>
-            <button
-              aria-label="Unduh rekap"
-              className="rounded-xl border border-gray-200 p-2.5 text-gray-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600"
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                download
-              </span>
-            </button>
-          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-left">
             <caption className="sr-only">
-              Rekap kehadiran siswa kelas 10 MIPA 1 hari ini
+              Rekap kehadiran siswa {kelasNama} hari ini
             </caption>
             <thead>
               <tr className="border-b border-gray-100 bg-slate-50/60 text-xs uppercase tracking-wider text-gray-400">
@@ -338,102 +299,58 @@ function AttendanceTable() {
                 <th scope="col" className="px-6 py-4 font-semibold">
                   Keterangan
                 </th>
-                <th scope="col" className="px-6 py-4 text-right font-semibold">
-                  Aksi
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-sm">
-              {ROWS.map((row) => (
-                <tr
-                  key={row.name}
-                  className="transition-colors hover:bg-slate-50/70"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        name={row.name}
-                        tone={row.tone}
-                        className="h-9 w-9 text-xs"
-                      />
-                      <span className="font-medium text-gray-900">
-                        {row.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 font-mono tabular-nums text-gray-500">
-                    {row.checkIn ?? '—'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${row.statusClass}`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${row.dotClass}`}
-                      />
-                      {row.status}
-                    </span>
-                  </td>
-                  <td
-                    className={`px-6 py-4 ${row.contact ? 'text-red-500' : 'text-gray-400'}`}
+              {roster.map((row) => {
+                const style = row.status ? STATUS_STYLE[row.status] : null;
+                return (
+                  <tr
+                    key={row.siswa.id}
+                    className="transition-colors hover:bg-slate-50/70"
                   >
-                    <span className="inline-flex items-center gap-1.5">
-                      {row.note}
-                      {row.attachment && (
-                        <button
-                          aria-label="Unduh lampiran"
-                          className="rounded-md text-emerald-600 transition-colors hover:text-emerald-700"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">
-                            attachment
-                          </span>
-                        </button>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    {row.contact ? (
-                      <button className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700">
-                        Hubungi
-                      </button>
-                    ) : (
-                      <button
-                        aria-label={`Opsi untuk ${row.name}`}
-                        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          more_vert
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar
+                          name={row.siswa.nama}
+                          tone={row.siswa.tone}
+                          className="h-9 w-9 text-xs"
+                        />
+                        <span className="font-medium text-gray-900">
+                          {row.siswa.nama}
                         </span>
-                      </button>
-                    )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-mono tabular-nums text-gray-500">
+                      {row.waktu ?? '—'}
+                    </td>
+                    <td className="px-6 py-4">
+                      {style ? (
+                        <span
+                          className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${style.chip}`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                          {row.status}
+                        </span>
+                      ) : (
+                        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-400 ring-1 ring-inset ring-slate-100">
+                          Belum Presensi
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-400">{row.keterangan}</td>
+                  </tr>
+                );
+              })}
+              {roster.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400">
+                    Belum ada data siswa untuk kelas ini.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
-        </div>
-
-        <div className="flex items-center justify-between px-6 py-4 text-sm text-gray-400 sm:px-8">
-          <span>Menampilkan 1–4 dari 35 siswa</span>
-          <div className="flex gap-1">
-            <button
-              aria-label="Halaman sebelumnya"
-              disabled
-              className="rounded-lg p-1.5 text-gray-300 disabled:cursor-not-allowed"
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                chevron_left
-              </span>
-            </button>
-            <button
-              aria-label="Halaman berikutnya"
-              className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-emerald-600"
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                chevron_right
-              </span>
-            </button>
-          </div>
         </div>
       </GlassCard>
     </ScrollReveal>

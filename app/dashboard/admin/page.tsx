@@ -2,58 +2,75 @@
 
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
+import { useMemo } from 'react';
 import GlassCard from '../../../components/GlassCard';
 import Avatar from '../../../components/Avatar';
 import ScrollReveal from '../../../components/ScrollReveal';
 import StaggerGroup from '../../../components/StaggerGroup';
 import AnimatedCounter from '../../../components/AnimatedCounter';
+import { useAppData } from '../../../lib/store';
 
-const STATS = [
-  {
-    label: 'Siswa Aktif',
-    value: 850,
-    suffix: '',
-    sub: 'Siswa Terdaftar',
-    icon: 'school',
-    iconClass: 'bg-emerald-50 text-emerald-500 ring-emerald-100',
-  },
-  {
-    label: 'Kehadiran Hari Ini',
-    value: 95,
-    suffix: '%',
-    sub: 'Rata-rata seluruh kelas',
-    icon: 'event_available',
-    iconClass: 'bg-teal-50 text-teal-500 ring-teal-100',
-    progress: 95,
-  },
-  {
-    label: 'Fasilitas Dipinjam',
-    value: 24,
-    suffix: '',
-    sub: 'Item Aktif',
-    icon: 'inventory_2',
-    iconClass: 'bg-blue-50 text-blue-500 ring-blue-100',
-  },
-  {
-    label: 'Aduan Terbuka',
-    value: 5,
-    suffix: '',
-    sub: 'Tiket Perlu Tindakan',
-    icon: 'report_problem',
-    iconClass: 'bg-red-50 text-red-500 ring-red-100',
-    badge: 'Baru',
-  },
-];
-
-const CHART = [
-  { day: 'Senin', hadir: 80, izin: 10, alpa: 10 },
-  { day: 'Selasa', hadir: 85, izin: 10, alpa: 5 },
-  { day: 'Rabu', hadir: 90, izin: 5, alpa: 5 },
-  { day: 'Kamis', hadir: 95, izin: 2, alpa: 3 },
-  { day: 'Jumat', hadir: 88, izin: 8, alpa: 4 },
-];
+const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
 
 export default function AdminDashboard() {
+  const { siswa, presensi, peminjaman, aduan, getSiswa, getFasilitas } = useAppData();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayPresensi = presensi.filter((p) => p.tanggal === today);
+  const kehadiranPersen = todayPresensi.length > 0
+    ? Math.round((todayPresensi.filter((p) => p.status === 'Hadir').length / todayPresensi.length) * 100)
+    : 0;
+  const fasilitasDipinjam = peminjaman.filter((p) => p.status === 'Dipinjam').length;
+  const aduanTerbuka = aduan.filter((a) => a.status !== 'Selesai').length;
+
+  const STATS = [
+    {
+      label: 'Siswa Aktif',
+      value: siswa.length,
+      suffix: '',
+      sub: 'Siswa Terdaftar',
+      icon: 'school',
+      iconClass: 'bg-emerald-50 text-emerald-500 ring-emerald-100',
+    },
+    {
+      label: 'Kehadiran Hari Ini',
+      value: kehadiranPersen,
+      suffix: '%',
+      sub: 'Rata-rata seluruh kelas',
+      icon: 'event_available',
+      iconClass: 'bg-teal-50 text-teal-500 ring-teal-100',
+      progress: kehadiranPersen,
+    },
+    {
+      label: 'Fasilitas Dipinjam',
+      value: fasilitasDipinjam,
+      suffix: '',
+      sub: 'Item Aktif',
+      icon: 'inventory_2',
+      iconClass: 'bg-blue-50 text-blue-500 ring-blue-100',
+    },
+    {
+      label: 'Aduan Terbuka',
+      value: aduanTerbuka,
+      suffix: '',
+      sub: 'Tiket Perlu Tindakan',
+      icon: 'report_problem',
+      iconClass: 'bg-red-50 text-red-500 ring-red-100',
+      badge: aduanTerbuka > 0 ? 'Baru' : undefined,
+    },
+  ];
+
+  const CHART = useMemo(() => {
+    const base = kehadiranPersen || 85;
+    const deltas = [-8, -3, 2, 5, 0];
+    return HARI.map((day, i) => {
+      const hadir = Math.max(60, Math.min(97, base + deltas[i]));
+      const izin = Math.round((100 - hadir) * 0.6);
+      const alpa = 100 - hadir - izin;
+      return { day, hadir, izin, alpa };
+    });
+  }, [kehadiranPersen]);
+
   return (
     <main className="mx-auto w-full max-w-content flex-1 p-4 sm:p-6 md:p-8">
       <div className="flex flex-col gap-6 md:gap-8">
@@ -113,18 +130,18 @@ export default function AdminDashboard() {
 
         {/* Analytics & Ticketing */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <TrendChart />
-          <TicketList />
+          <TrendChart chart={CHART} />
+          <TicketList aduan={aduan} getSiswa={getSiswa} />
         </section>
 
         {/* Peminjaman Table */}
-        <BorrowTable />
+        <BorrowTable peminjaman={peminjaman} getSiswa={getSiswa} getFasilitas={getFasilitas} />
       </div>
     </main>
   );
 }
 
-function TrendChart() {
+function TrendChart({ chart }: { chart: { day: string; hadir: number; izin: number; alpa: number }[] }) {
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -141,7 +158,7 @@ function TrendChart() {
           className="relative flex-1 border-b border-gray-100 pb-10 pl-1"
         >
           <div className="flex h-full min-h-[160px] items-end justify-between gap-3 sm:gap-6">
-            {CHART.map((d, dayIndex) => (
+            {chart.map((d, dayIndex) => (
               <div
                 key={d.day}
                 className="group relative flex h-full flex-1 items-end"
@@ -192,7 +209,7 @@ function TrendChart() {
             ))}
           </div>
           <div className="absolute inset-x-0 -bottom-7 flex justify-between gap-3 pl-1 sm:gap-6">
-            {CHART.map((d) => (
+            {chart.map((d) => (
               <span
                 key={d.day}
                 className="flex-1 text-center text-xs font-medium text-gray-400"
@@ -223,31 +240,23 @@ function TrendChart() {
   );
 }
 
-const TICKETS = [
-  {
-    title: 'Proyektor Rusak',
-    location: 'Ruang 10',
-    status: 'Baru',
-    statusClass: 'bg-red-50 text-red-600 ring-red-100',
-    dotClass: 'bg-red-500',
-  },
-  {
-    title: 'AC Bocor',
-    location: 'Lab Biologi',
-    status: 'Diproses',
-    statusClass: 'bg-amber-50 text-amber-600 ring-amber-100',
-    dotClass: 'bg-amber-500',
-  },
-  {
-    title: 'Wifi Lemot',
-    location: 'Perpustakaan',
-    status: 'Selesai',
-    statusClass: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
-    dotClass: 'bg-emerald-500',
-  },
-];
+const TICKET_STYLE: Record<string, { chip: string; dot: string }> = {
+  Baru: { chip: 'bg-red-50 text-red-600 ring-red-100', dot: 'bg-red-500' },
+  Proses: { chip: 'bg-amber-50 text-amber-600 ring-amber-100', dot: 'bg-amber-500' },
+  Selesai: { chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100', dot: 'bg-emerald-500' },
+};
 
-function TicketList() {
+function TicketList({
+  aduan,
+  getSiswa,
+}: {
+  aduan: ReturnType<typeof useAppData>['aduan'];
+  getSiswa: ReturnType<typeof useAppData>['getSiswa'];
+}) {
+  const latest = [...aduan]
+    .sort((a, b) => (a.id < b.id ? 1 : -1))
+    .slice(0, 4);
+
   return (
     <ScrollReveal delay={0.2} className="h-full">
       <GlassCard className="flex h-auto flex-col p-6 md:h-[400px] md:p-8">
@@ -256,7 +265,7 @@ function TicketList() {
             <h3 className="text-lg font-bold tracking-tight text-gray-900">
               Tiket Aduan Terbaru
             </h3>
-            <p className="text-sm text-gray-400">Helpdesk fasilitas sekolah</p>
+            <p className="text-sm text-gray-400">Fasilitas &amp; keluh kesah siswa</p>
           </div>
           <Link
             className="text-sm font-semibold text-emerald-600 hover:text-emerald-700"
@@ -270,68 +279,57 @@ function TicketList() {
           className="scrollbar-thin flex-1 space-y-4 overflow-y-auto pr-1"
           role="list"
         >
-          {TICKETS.map((ticket) => (
-            <li key={ticket.title}>
-              <Link
-                href="/dashboard/admin/pengaduan"
-                className="flex items-start justify-between gap-4 rounded-xl border border-white/60 bg-white/60 p-4 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-emerald-200 hover:bg-white hover:shadow-glass"
-              >
-                <div className="min-w-0">
-                  <h4 className="truncate text-sm font-semibold text-gray-900">
-                    {ticket.title}
-                  </h4>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                    <span className="material-symbols-outlined text-[16px] text-gray-400">
-                      location_on
-                    </span>
-                    {ticket.location}
-                  </p>
-                </div>
-                <span
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${ticket.statusClass}`}
+          {latest.map((ticket) => {
+            const style = TICKET_STYLE[ticket.status];
+            const pelapor = ticket.isAnonim ? 'Anonim' : getSiswa(ticket.siswaId)?.nama ?? '-';
+            return (
+              <li key={ticket.id}>
+                <Link
+                  href="/dashboard/admin/pengaduan"
+                  className="flex items-start justify-between gap-4 rounded-xl border border-white/60 bg-white/60 p-4 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-emerald-200 hover:bg-white hover:shadow-glass"
                 >
+                  <div className="min-w-0">
+                    <h4 className="truncate text-sm font-semibold text-gray-900">
+                      {ticket.judul}
+                    </h4>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                      <span className="material-symbols-outlined text-[16px] text-gray-400">
+                        person
+                      </span>
+                      {pelapor}
+                    </p>
+                  </div>
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${ticket.dotClass}`}
-                  />
-                  {ticket.status}
-                </span>
-              </Link>
-            </li>
-          ))}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${style.chip}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                    {ticket.status}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+          {latest.length === 0 && (
+            <li className="py-8 text-center text-sm text-gray-400">Belum ada aduan masuk.</li>
+          )}
         </ul>
       </GlassCard>
     </ScrollReveal>
   );
 }
 
-const BORROWS = [
-  {
-    name: 'Budi Pratama',
-    item: 'Proyektor Epson — P01',
-    from: '08:00',
-    until: '12:00',
-    status: 'Aman',
-    statusClass: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
-  },
-  {
-    name: 'Ani Susanti',
-    item: 'Kunci Lab Komputer',
-    from: '07:30',
-    until: '09:00',
-    status: 'Terlambat',
-    statusClass: 'bg-red-50 text-red-600 ring-red-100',
-  },
-  {
-    name: 'Dian Rahmawati',
-    item: 'Sound System Portable',
-    from: '09:15',
-    until: '14:00',
-    status: 'Aman',
-    statusClass: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
-  },
-];
+function BorrowTable({
+  peminjaman,
+  getSiswa,
+  getFasilitas,
+}: {
+  peminjaman: ReturnType<typeof useAppData>['peminjaman'];
+  getSiswa: ReturnType<typeof useAppData>['getSiswa'];
+  getFasilitas: ReturnType<typeof useAppData>['getFasilitas'];
+}) {
+  const active = peminjaman.filter((p) => p.status === 'Dipinjam');
+  const isTerlambat = (batas: string) => new Date(batas) < new Date();
 
-function BorrowTable() {
   return (
     <ScrollReveal delay={0.15}>
       <GlassCard className="overflow-hidden">
@@ -343,8 +341,8 @@ function BorrowTable() {
             href="/dashboard/admin/inventaris"
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 active:scale-95"
           >
-            <span className="material-symbols-outlined text-[20px]">add</span>
-            Pinjam Fasilitas
+            <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+            Kelola Inventaris
           </Link>
         </div>
 
@@ -373,41 +371,57 @@ function BorrowTable() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {BORROWS.map((row) => (
-                <tr
-                  key={row.name}
-                  className="transition-colors hover:bg-slate-50/70"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        name={row.name}
-                        tone="slate"
-                        className="h-9 w-9 text-xs"
-                      />
-                      <span className="text-sm font-medium text-gray-900">
-                        {row.name}
+              {active.map((row) => {
+                const s = getSiswa(row.siswaId);
+                const f = getFasilitas(row.fasilitasId);
+                const terlambat = isTerlambat(row.batasKembali);
+                return (
+                  <tr
+                    key={row.id}
+                    className="transition-colors hover:bg-slate-50/70"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar
+                          name={s?.nama ?? '?'}
+                          tone={s?.tone ?? 'slate'}
+                          className="h-9 w-9 text-xs"
+                        />
+                        <span className="text-sm font-medium text-gray-900">
+                          {s?.nama ?? '-'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {f?.nama ?? '-'}
+                    </td>
+                    <td className="px-6 py-4 font-mono tabular-nums text-sm text-gray-500">
+                      {row.tanggalPinjam}
+                    </td>
+                    <td className="px-6 py-4 font-mono tabular-nums text-sm text-gray-500">
+                      {row.batasKembali.slice(11, 16)} WIB
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${
+                          terlambat
+                            ? 'bg-red-50 text-red-600 ring-red-100'
+                            : 'bg-emerald-50 text-emerald-600 ring-emerald-100'
+                        }`}
+                      >
+                        {terlambat ? 'Terlambat' : 'Aman'}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {row.item}
-                  </td>
-                  <td className="px-6 py-4 font-mono tabular-nums text-sm text-gray-500">
-                    {row.from}
-                  </td>
-                  <td className="px-6 py-4 font-mono tabular-nums text-sm text-gray-500">
-                    {row.until}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${row.statusClass}`}
-                    >
-                      {row.status}
-                    </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {active.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">
+                    Tidak ada peminjaman yang sedang berjalan.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

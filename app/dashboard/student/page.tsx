@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../components/GlassCard';
 import ScrollReveal from '../../../components/ScrollReveal';
 import StaggerGroup from '../../../components/StaggerGroup';
+import { CURRENT_SISWA_ID, useAppData } from '../../../lib/store';
 
 export default function StudentDashboard() {
+  const { presensi, izin, tugas, submisi, peminjaman, getSiswa, getFasilitas, checkIn } = useAppData();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -21,6 +23,27 @@ export default function StudentDashboard() {
     hour12: false,
     timeZone: 'Asia/Jakarta',
   });
+
+  const me = getSiswa(CURRENT_SISWA_ID);
+  const today = new Date().toISOString().slice(0, 10);
+  const sudahHadir = presensi.some((p) => p.siswaId === CURRENT_SISWA_ID && p.tanggal === today);
+
+  const tugasAktif = useMemo(() => {
+    if (!me) return [];
+    return tugas
+      .filter((t) => t.kelasId === me.kelasId && !submisi.some((s) => s.tugasId === t.id && s.siswaId === CURRENT_SISWA_ID))
+      .slice(0, 2);
+  }, [tugas, submisi, me]);
+
+  const latestIzin = useMemo(
+    () => izin.filter((i) => i.siswaId === CURRENT_SISWA_ID).sort((a, b) => new Date(b.diajukanPada).getTime() - new Date(a.diajukanPada).getTime())[0],
+    [izin],
+  );
+
+  const activeLoan = useMemo(
+    () => peminjaman.find((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam'),
+    [peminjaman],
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-content flex-1 flex-col gap-6 p-4 sm:p-6 md:gap-8 md:p-8">
@@ -41,33 +64,45 @@ export default function StudentDashboard() {
               </div>
               <h3 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
                 Status Hari Ini:{' '}
-                <span className="text-emerald-600">Belum Hadir</span>
+                <span className={sudahHadir ? 'text-emerald-600' : 'text-amber-600'}>
+                  {sudahHadir ? 'Sudah Hadir' : 'Belum Hadir'}
+                </span>
               </h3>
               <p className="max-w-md text-sm leading-relaxed text-gray-500">
-                Silakan lakukan presensi kedatangan untuk mencatat kehadiran
-                Anda pada sistem.
+                {sudahHadir
+                  ? 'Presensimu hari ini sudah tercatat. Semangat belajar!'
+                  : 'Silakan lakukan presensi kedatangan untuk mencatat kehadiran Anda pada sistem.'}
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Link
-                  href="/dashboard/student/presensi"
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
-                >
-                  <span className="material-symbols-outlined icon-fill text-[20px]">
-                    fingerprint
-                  </span>
-                  Check-In Sekarang
-                </Link>
+                {sudahHadir ? (
+                  <Link
+                    href="/dashboard/student/presensi"
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                  >
+                    <span className="material-symbols-outlined icon-fill text-[20px]">task_alt</span>
+                    Lihat Presensi
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => checkIn(CURRENT_SISWA_ID)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                  >
+                    <span className="material-symbols-outlined icon-fill text-[20px]">fingerprint</span>
+                    Check-In Sekarang
+                  </button>
+                )}
                 <Link
                   href="/dashboard/student/peminjaman"
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white/70 px-6 py-3 text-sm font-semibold text-emerald-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-50"
                 >
-                  peminjaman Fasilitas
+                  Peminjaman Fasilitas
                 </Link>
                 <Link
                   href="/dashboard/student/tugas"
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white/70 px-6 py-3 text-sm font-semibold text-emerald-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-50"
                 >
-                  tugas
+                  Tugas
                 </Link>
               </div>
             </div>
@@ -113,45 +148,36 @@ export default function StudentDashboard() {
             </Link>
           </div>
           <ul className="mt-4 flex flex-col gap-1">
-            {[
-              {
-                subject: 'Matematika — Aljabar',
-                desc: 'Latihan soal halaman 45–50. Kumpulkan di loker guru.',
-                due: '2 Hari',
-                urgent: true,
-              },
-              {
-                subject: 'Bahasa Inggris — Essay',
-                desc: 'Essay 500 kata “My Future Career”. Upload PDF.',
-                due: 'Besok',
-                urgent: false,
-              },
-            ].map((task) => (
-              <li key={task.subject}>
-                <Link
-                  href="/dashboard/student/tugas"
-                  className="group -mx-2 flex flex-col gap-1.5 rounded-xl px-2 py-3 transition-colors hover:bg-white/60"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-sm font-semibold text-gray-900 transition-colors group-hover:text-emerald-700">
-                      {task.subject}
-                    </span>
-                    <span
-                      className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${
-                        task.urgent
-                          ? 'bg-red-50 text-red-600 ring-red-100'
-                          : 'bg-amber-50 text-amber-600 ring-amber-100'
-                      }`}
-                    >
-                      Due: {task.due}
-                    </span>
-                  </div>
-                  <p className="text-xs leading-relaxed text-gray-500">
-                    {task.desc}
-                  </p>
-                </Link>
-              </li>
-            ))}
+            {tugasAktif.map((t) => {
+              const terlambat = new Date(t.deadline) < new Date(today);
+              return (
+                <li key={t.id}>
+                  <Link
+                    href="/dashboard/student/tugas"
+                    className="group -mx-2 flex flex-col gap-1.5 rounded-xl px-2 py-3 transition-colors hover:bg-white/60"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-sm font-semibold text-gray-900 transition-colors group-hover:text-emerald-700">
+                        {t.mapel} — {t.judul}
+                      </span>
+                      <span
+                        className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${
+                          terlambat
+                            ? 'bg-red-50 text-red-600 ring-red-100'
+                            : 'bg-amber-50 text-amber-600 ring-amber-100'
+                        }`}
+                      >
+                        {t.deadline}
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-gray-500">{t.deskripsi}</p>
+                  </Link>
+                </li>
+              );
+            })}
+            {tugasAktif.length === 0 && (
+              <p className="py-6 text-center text-sm text-gray-400">Semua tugas sudah dikumpulkan 🎉</p>
+            )}
           </ul>
         </GlassCard>
 
@@ -162,29 +188,34 @@ export default function StudentDashboard() {
               <span className="material-symbols-outlined icon-fill text-[20px] text-blue-500">
                 medical_services
               </span>
-              Status Pengajuan izin
+              Status Pengajuan Izin
             </h4>
           </div>
           <div className="flex flex-1 items-center py-4">
-            <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 text-center shadow-glass">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-500 shadow-sm ring-1 ring-inset ring-blue-100/60">
-                <span className="material-symbols-outlined icon-fill text-[28px]">
-                  pending_actions
+            {latestIzin ? (
+              <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 text-center shadow-glass">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-500 shadow-sm ring-1 ring-inset ring-blue-100/60">
+                  <span className="material-symbols-outlined icon-fill text-[28px]">
+                    {latestIzin.status === 'Menunggu' ? 'pending_actions' : latestIzin.status === 'Disetujui' ? 'check_circle' : 'cancel'}
+                  </span>
+                </div>
+                <h5 className="mb-1 text-sm font-semibold text-gray-900">
+                  {latestIzin.jenis} — {latestIzin.tanggalMulai}
+                </h5>
+                <p className="mb-4 text-xs text-gray-500">{latestIzin.alasan}</p>
+                <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold ring-1 ring-inset ${
+                  latestIzin.status === 'Menunggu'
+                    ? 'bg-amber-50 text-amber-600 ring-amber-100'
+                    : latestIzin.status === 'Disetujui'
+                      ? 'bg-emerald-50 text-emerald-600 ring-emerald-100'
+                      : 'bg-red-50 text-red-600 ring-red-100'
+                }`}>
+                  {latestIzin.status === 'Menunggu' ? 'Menunggu Validasi' : latestIzin.status}
                 </span>
               </div>
-              <h5 className="mb-1 text-sm font-semibold text-gray-900">
-                Izin Sakit — 22 Mei
-              </h5>
-              <p className="mb-4 text-xs text-gray-500">
-                Surat keterangan dokter telah diunggah.
-              </p>
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-600 ring-1 ring-inset ring-amber-100">
-                <span className="material-symbols-outlined icon-fill text-[14px]">
-                  hourglass_empty
-                </span>
-                Menunggu Validas
-              </span>
-            </div>
+            ) : (
+              <p className="w-full py-6 text-center text-sm text-gray-400">Belum ada pengajuan izin.</p>
+            )}
           </div>
         </GlassCard>
 
@@ -205,35 +236,35 @@ export default function StudentDashboard() {
             </Link>
           </div>
           <div className="flex flex-1 items-center py-4">
-            <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 shadow-glass">
-              <div
-                aria-hidden="true"
-                className="absolute -right-4 -top-4 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50"
-              >
-                <span className="material-symbols-outlined text-[36px] text-emerald-200">
-                  videocam
-                </span>
-              </div>
-              <div className="relative z-10">
-                <h5 className="mb-1 pr-10 text-sm font-semibold text-gray-900">
-                  Proyektor Mini (Ruang 4)
-                </h5>
-                <p className="mb-5 text-xs text-gray-500">
-                  Dipinjam untuk presentasi Sejarah.
-                </p>
-                <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white/90 px-4 py-3">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                    Batas Kembali
-                  </span>
-                  <span className="flex items-center gap-1.5 text-sm font-bold text-red-500">
-                    <span className="material-symbols-outlined icon-fill text-[16px]">
-                      schedule
-                    </span>
-                    16:00 WIB
+            {activeLoan ? (
+              <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 shadow-glass">
+                <div
+                  aria-hidden="true"
+                  className="absolute -right-4 -top-4 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50"
+                >
+                  <span className="material-symbols-outlined text-[36px] text-emerald-200">
+                    {getFasilitas(activeLoan.fasilitasId)?.icon ?? 'inventory_2'}
                   </span>
                 </div>
+                <div className="relative z-10">
+                  <h5 className="mb-1 pr-10 text-sm font-semibold text-gray-900">
+                    {getFasilitas(activeLoan.fasilitasId)?.nama ?? '-'}
+                  </h5>
+                  <p className="mb-5 text-xs text-gray-500">{activeLoan.keperluan}</p>
+                  <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white/90 px-4 py-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Batas Kembali
+                    </span>
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-red-500">
+                      <span className="material-symbols-outlined icon-fill text-[16px]">schedule</span>
+                      {activeLoan.batasKembali.slice(11, 16)} WIB
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="w-full py-6 text-center text-sm text-gray-400">Tidak ada peminjaman aktif.</p>
+            )}
           </div>
         </GlassCard>
       </StaggerGroup>
