@@ -32,7 +32,7 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
     user: { name: 'Ahmad Fauzi', subtitle: 'Kelas 10 MIPA 1' },
     items: [
       {
-        href: '/dashboard/student',
+        href: '/dashboard/student/beranda',
         label: 'Beranda',
         icon: 'dashboard',
         exact: true,

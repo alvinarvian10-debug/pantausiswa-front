@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 const DEMO_ROLES = [
-  { href: '/dashboard/student', label: 'Siswa', icon: 'face' },
+  { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face' },
   { href: '/dashboard/guru', label: 'Guru', icon: 'co_present' },
   { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings' },
 ] as const;
