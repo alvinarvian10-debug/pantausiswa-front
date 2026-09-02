@@ -87,7 +87,7 @@ export default function LaporanAduanPage() {
         ))}
       </div>
 
-      <StaggerGroup as="div" className="flex flex-col gap-4">
+      <StaggerGroup key={filter} as="div" className="flex flex-col gap-4">
         {visible.map((a) => {
           const pelapor = a.isAnonim ? 'Anonim' : getSiswa(a.siswaId)?.nama ?? '-';
           const fasilitasTerkait = a.fasilitasId ? getFasilitas(a.fasilitasId)?.nama : null;
@@ -145,7 +145,7 @@ export default function LaporanAduanPage() {
 
       {responTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-md p-6">
+          <GlassCard className="max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-gray-900">Tanggapi: {responTarget.judul}</h2>
             <form className="mt-5 flex flex-col gap-4" onSubmit={handleRespon}>
               <textarea

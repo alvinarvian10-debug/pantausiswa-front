@@ -172,7 +172,7 @@ function TrendChart({ chart }: { chart: { day: string; hadir: number; izin: numb
                     style={{ height: `${d.hadir}%`, transformOrigin: 'bottom' }}
                     initial={shouldReduceMotion ? undefined : { scaleY: 0 }}
                     whileInView={shouldReduceMotion ? undefined : { scaleY: 1 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: true, margin: '-32px' }}
                     transition={{
                       duration: 0.7,
                       delay: dayIndex * 0.1,
@@ -184,7 +184,7 @@ function TrendChart({ chart }: { chart: { day: string; hadir: number; izin: numb
                     style={{ height: `${d.izin}%`, transformOrigin: 'bottom' }}
                     initial={shouldReduceMotion ? undefined : { scaleY: 0 }}
                     whileInView={shouldReduceMotion ? undefined : { scaleY: 1 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: true, margin: '-32px' }}
                     transition={{
                       duration: 0.7,
                       delay: dayIndex * 0.1,
@@ -196,7 +196,7 @@ function TrendChart({ chart }: { chart: { day: string; hadir: number; izin: numb
                     style={{ height: `${d.alpa}%`, transformOrigin: 'bottom' }}
                     initial={shouldReduceMotion ? undefined : { scaleY: 0 }}
                     whileInView={shouldReduceMotion ? undefined : { scaleY: 1 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: true, margin: '-32px' }}
                     transition={{
                       duration: 0.7,
                       delay: dayIndex * 0.1,

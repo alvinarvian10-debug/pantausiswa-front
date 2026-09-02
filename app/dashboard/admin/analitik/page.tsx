@@ -96,16 +96,16 @@ export default function AnalitikPage() {
         <GlassCard className="p-6 md:p-8">
           <h2 className="mb-1 text-lg font-bold tracking-tight text-gray-900">Tren Kehadiran Mingguan</h2>
           <p className="mb-6 text-sm text-gray-400">Persentase siswa hadir per hari</p>
-          <div className="flex h-48 items-end justify-between gap-4 sm:gap-8">
+          <div className="flex h-48 items-end justify-between gap-2 overflow-x-auto sm:gap-4 md:gap-8">
             {weeklyTrend.map((val, i) => (
-              <div key={HARI[i]} className="flex flex-1 flex-col items-center gap-2">
+              <div key={HARI[i]} className="flex min-w-[36px] flex-1 flex-col items-center gap-2">
                 <span className="text-xs font-semibold text-gray-500">{val}%</span>
-                <div className="flex h-36 w-full items-end overflow-hidden rounded-t-lg bg-slate-50">
+                <div className="flex h-36 w-full min-h-[144px] items-end overflow-hidden rounded-t-lg bg-slate-50">
                   <motion.div
                     style={{ height: `${val}%`, width: '100%', transformOrigin: 'bottom' }}
                     initial={shouldReduceMotion ? undefined : { scaleY: 0 }}
                     whileInView={shouldReduceMotion ? undefined : { scaleY: 1 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: true, margin: '-32px' }}
                     transition={{ duration: 0.7, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
                     className="w-full rounded-t-lg bg-gradient-to-t from-emerald-500 to-emerald-400"
                   />
@@ -131,7 +131,7 @@ export default function AnalitikPage() {
                       style={{ width: `${m.rata}%`, transformOrigin: 'left' }}
                       initial={shouldReduceMotion ? undefined : { scaleX: 0 }}
                       whileInView={shouldReduceMotion ? undefined : { scaleX: 1 }}
-                      viewport={{ once: true }}
+                      viewport={{ once: true, margin: '-32px' }}
                       transition={{ duration: 0.7, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
                       className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
                     />

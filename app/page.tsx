@@ -72,12 +72,12 @@ export default function BerandaPage() {
           <ParallaxLayer
             aria-hidden="true"
             offset={50}
-            className="pointer-events-none absolute -right-40 -top-40 h-[480px] w-[480px] rounded-full bg-emerald-100/60 blur-3xl"
+            className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-emerald-100/60 blur-3xl sm:-right-40 sm:-top-40 sm:h-[480px] sm:w-[480px]"
           />
           <ParallaxLayer
             aria-hidden="true"
             offset={80}
-            className="pointer-events-none absolute -left-48 top-64 h-[420px] w-[420px] rounded-full bg-blue-50/80 blur-3xl"
+            className="pointer-events-none absolute -left-20 top-40 h-56 w-56 rounded-full bg-blue-50/80 blur-3xl sm:-left-48 sm:top-64 sm:h-[420px] sm:w-[420px]"
           />
 
           <div className="relative mx-auto grid w-full max-w-7xl items-center gap-16 lg:grid-cols-2">

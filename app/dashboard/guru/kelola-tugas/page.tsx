@@ -216,7 +216,7 @@ export default function KelolaTugasPage() {
               {kelasTugas.length > 0 && (
                 <div className="mt-6">
                   <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">Tugas yang Sudah Diberikan</h3>
-                  <StaggerGroup as="div" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <StaggerGroup key={activeKelas.id} as="div" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {kelasTugas.map((t) => (
                       <GlassCard key={t.id} className="p-5">
                         <span className="text-xs font-semibold text-emerald-700">{t.mapel}</span>
@@ -301,7 +301,7 @@ export default function KelolaTugasPage() {
 
       {gradeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6">
+          <GlassCard className="max-h-[90vh] w-full max-w-sm overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-gray-900">
               Nilai Tugas — {getSiswa(gradeTarget.siswaId)?.nama}
             </h2>

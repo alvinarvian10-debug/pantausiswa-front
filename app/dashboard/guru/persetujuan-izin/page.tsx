@@ -104,7 +104,7 @@ export default function PersetujuanIzinPage() {
       </ScrollReveal>
 
       {activeKelas && (
-        <StaggerGroup as="div" className="flex flex-col gap-4">
+        <StaggerGroup key={`${activeKelas.id}-${showAll}`} as="div" className="flex flex-col gap-4">
           {kelasIzin.map((req) => {
             const s = getSiswa(req.siswaId);
             return (
@@ -170,7 +170,7 @@ export default function PersetujuanIzinPage() {
 
       {rejectTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-md p-6">
+          <GlassCard className="max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-gray-900">
               Tolak Pengajuan {getSiswa(rejectTarget.siswaId)?.nama}
             </h2>

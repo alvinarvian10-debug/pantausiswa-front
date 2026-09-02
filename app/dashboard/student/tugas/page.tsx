@@ -191,7 +191,7 @@ export default function TugasPage() {
 
       {activeTugas && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-md p-6">
+          <GlassCard className="max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-gray-900">Kumpulkan: {activeTugas.judul}</h2>
             <form className="mt-5 flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="grid grid-cols-3 gap-2">

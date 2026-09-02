@@ -141,7 +141,7 @@ export default function PeminjamanPage() {
         </section>
       </ScrollReveal>
 
-      <StaggerGroup as="div" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <StaggerGroup key={`${category}-${query}`} as="div" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((f) => {
           const bermasalah = f.kondisi !== 'Baik';
           const habis = f.jumlahTersedia < 1;
@@ -189,7 +189,7 @@ export default function PeminjamanPage() {
 
       {pickedFasilitas && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-md p-6">
+          <GlassCard className="max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-gray-900">
               Ajukan Pinjaman: {pickedFasilitas.nama}
             </h2>

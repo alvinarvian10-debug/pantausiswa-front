@@ -1,21 +1,24 @@
 'use client';
 
-import { Role, getRoleUser } from './Sidebar';
+import { Role, useRoleUser } from './Sidebar';
 import Avatar from './Avatar';
+import NotificationBell from './NotificationBell';
 
 interface TopHeaderProps {
   role: Role;
   onMenuClick: () => void;
 }
 
-const HEADER_META: Record<Role, { title: string; subtitle: string }> = {
-  student: { title: 'Selamat Datang, Ahmad Fauzi', subtitle: 'Semangat belajar hari ini!' },
-  guru: { title: 'Dashboard Guru', subtitle: 'Kelola kelas dan pengajaran Anda' },
-  admin: { title: 'Dashboard Admin', subtitle: 'Ringkasan operasional sekolah' },
+const HEADER_META: Record<Role, { subtitle: string }> = {
+  student: { subtitle: 'Semangat belajar hari ini!' },
+  guru: { subtitle: 'Kelola kelas dan pengajaran Anda' },
+  admin: { subtitle: 'Ringkasan operasional sekolah' },
 };
 
 export default function TopHeader({ role, onMenuClick }: TopHeaderProps) {
+  const user = useRoleUser(role);
   const meta = HEADER_META[role];
+  const title = role === 'student' ? `Selamat Datang, ${user.name}` : role === 'guru' ? 'Dashboard Guru' : 'Dashboard Admin';
   const today = new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
     day: 'numeric',
@@ -37,8 +40,8 @@ export default function TopHeader({ role, onMenuClick }: TopHeaderProps) {
 
         <div className="min-w-0 flex-1 md:flex-none">
           <h2 className="truncate text-lg font-semibold leading-tight text-gray-900 md:text-xl">
-            <span className="md:hidden">{getRoleUser(role).name}</span>
-            <span className="hidden md:inline">{meta.title}</span>
+            <span className="md:hidden">{user.name}</span>
+            <span className="hidden md:inline">{title}</span>
           </h2>
           <p className="hidden truncate text-sm text-gray-500 md:block">{meta.subtitle}</p>
         </div>
@@ -65,21 +68,12 @@ export default function TopHeader({ role, onMenuClick }: TopHeaderProps) {
           {today}
         </span>
 
-        <button
-          aria-label="Notifikasi"
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-white/80 hover:text-emerald-600"
-        >
-          <span className="material-symbols-outlined text-[24px]">notifications</span>
-          <span
-            aria-hidden="true"
-            className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
-          />
-        </button>
+        <NotificationBell role={role} />
 
         <div className="ml-1 flex items-center gap-3 rounded-full bg-white/60 py-1 pl-1 pr-1 ring-1 ring-white/60 sm:pr-4">
-          <Avatar name={getRoleUser(role).name} className="h-9 w-9 text-xs" />
+          <Avatar name={user.name} className="h-9 w-9 text-xs" />
           <span className="hidden text-sm font-semibold text-gray-900 sm:block">
-            {getRoleUser(role).name}
+            {user.name}
           </span>
         </div>
       </div>

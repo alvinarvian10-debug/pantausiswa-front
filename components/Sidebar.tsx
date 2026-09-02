@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Avatar from './Avatar';
+import { CURRENT_GURU_ID, CURRENT_SISWA_ID, useAppData } from '../lib/store';
 
 export type Role = 'student' | 'guru' | 'admin';
 
@@ -20,7 +21,6 @@ interface NavItem {
 
 interface RoleConfig {
   portalLabel: string;
-  user: { name: string; subtitle: string };
   items: NavItem[];
   /** Optional CTA rendered at the bottom of the sidebar (e.g. "Lapor Kendala"). */
   quickLink?: { href: string; label: string };
@@ -29,7 +29,6 @@ interface RoleConfig {
 const NAV_CONFIG: Record<Role, RoleConfig> = {
   student: {
     portalLabel: 'Portal Siswa',
-    user: { name: 'Ahmad Fauzi', subtitle: 'Kelas 10 MIPA 1' },
     items: [
       {
         href: '/dashboard/student/beranda',
@@ -54,7 +53,6 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
   },
   guru: {
     portalLabel: 'Portal Guru',
-    user: { name: 'Budi Santoso', subtitle: 'Wali Kelas 10 MIPA 1' },
     items: [
       {
         href: '/dashboard/guru',
@@ -82,7 +80,6 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
   },
   admin: {
     portalLabel: 'Portal Admin',
-    user: { name: 'School Admin', subtitle: 'Administrator Sekolah' },
     items: [
       {
         href: '/dashboard/admin',
@@ -120,8 +117,19 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
   },
 };
 
-export function getRoleUser(role: Role) {
-  return NAV_CONFIG[role].user;
+export function useRoleUser(role: Role): { name: string; subtitle: string } {
+  const { getSiswa, getGuru, getKelas } = useAppData();
+  if (role === 'student') {
+    const s = getSiswa(CURRENT_SISWA_ID);
+    const kelas = s ? getKelas(s.kelasId) : undefined;
+    return { name: s?.nama ?? 'Siswa', subtitle: kelas?.nama ?? '-' };
+  }
+  if (role === 'guru') {
+    const g = getGuru(CURRENT_GURU_ID);
+    const kelas = g?.waliKelasId ? getKelas(g.waliKelasId) : undefined;
+    return { name: g?.nama ?? 'Guru', subtitle: kelas ? `Wali Kelas ${kelas.nama}` : (g?.mapel.join(', ') ?? '-') };
+  }
+  return { name: 'Admin Sekolah', subtitle: 'Administrator Sekolah' };
 }
 
 interface SidebarProps {
@@ -132,6 +140,7 @@ interface SidebarProps {
 
 export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
   const config = NAV_CONFIG[role];
+  const user = useRoleUser(role);
 
   return (
     <>
@@ -202,13 +211,13 @@ export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
           )}
 
           <div className="flex items-center gap-3 rounded-xl bg-white/60 p-3 ring-1 ring-white/60">
-            <Avatar name={config.user.name} className="h-10 w-10 text-sm" />
+            <Avatar name={user.name} className="h-10 w-10 text-sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-gray-900">
-                {config.user.name}
+                {user.name}
               </p>
               <p className="truncate text-xs text-gray-500">
-                {config.user.subtitle}
+                {user.subtitle}
               </p>
             </div>
           </div>
