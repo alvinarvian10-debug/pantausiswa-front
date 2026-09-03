@@ -8,51 +8,6 @@ import StaggerGroup from '../components/StaggerGroup';
 import RoleShowcase from '../components/RoleShowcase';
 import ShowcaseCarousel from '../components/ShowcaseCarousel';
 
-const FEATURES = [
-  {
-    icon: 'fact_check',
-    title: 'Presensi Terpadu',
-    description:
-      'Pantau kehadiran siswa secara real-time dengan pencatatan digital yang akurat dan terintegrasi dengan laporan wali kelas.',
-    tag: 'Real-time',
-  },
-  {
-    icon: 'assignment_turned_in',
-    title: 'Dispensasi & Izin',
-    description:
-      'Digitalisasi permohonan izin dan dispensasi siswa dengan alur persetujuan yang transparan dan cepat.',
-    tag: 'Otomatis',
-  },
-  {
-    icon: 'meeting_room',
-    title: 'Peminjaman Fasilitas',
-    description:
-      'Booking ruangan, laboratorium, dan peralatan sekolah secara terpusat tanpa bentrok jadwal.',
-    tag: 'Terpusat',
-  },
-  {
-    icon: 'folder_special',
-    title: 'Pengumpulan Tugas',
-    description:
-      'Portal terpusat untuk distribusi dan pengumpulan tugas, memudahkan evaluasi oleh tenaga pendidik.',
-    tag: 'Effisien',
-  },
-  {
-    icon: 'support_agent',
-    title: 'Aduan Sekolah',
-    description:
-      'Sistem ticketing untuk pelaporan masalah fasilitas atau kendala administratif secara terstruktur.',
-    tag: 'Helpdesk',
-  },
-  {
-    icon: 'monitoring',
-    title: 'Analitik Sekolah',
-    description:
-      'Dashboard analitik untuk memantau tren kehadiran, performa kelas, dan operasional sekolah keseluruhan.',
-    tag: 'Insight',
-  },
-] as const;
-
 const STATS = [
   { value: 100, suffix: '+', label: 'Sekolah Pengguna' },
   { value: 50, suffix: 'k+', label: 'Siswa Aktif' },
@@ -150,64 +105,6 @@ export default function BerandaPage() {
 
         {/* ============ Showcase Carousel ============ */}
         <ShowcaseCarousel />
-
-        {/* ============ Features ============ */}
-        <section
-          className="border-y border-gray-100 bg-slate-50/70 px-6 py-24"
-          id="fitur"
-        >
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto mb-16 max-w-2xl text-center">
-              <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-emerald-600">
-                Fitur Unggulan
-              </p>
-              <h2 className="mb-4 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Semua Kebutuhan Sekolah, Satu Platform
-              </h2>
-              <p className="text-lg leading-relaxed text-gray-500">
-                Dirancang khusus untuk memenuhi kebutuhan manajemen sekolah
-                modern dengan antarmuka yang intuitif dan mudah digunakan.
-              </p>
-            </div>
-
-            <StaggerGroup
-              as="ul"
-              className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
-            >
-              {FEATURES.map((feature) => (
-                <article
-                  key={feature.title}
-                  className="flex h-full rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/10"
-                >
-                  <Link className="group block h-full" href="/login">
-                    <div className="flex h-full flex-col p-8">
-                      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500 transition-all duration-300 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-cta">
-                        <span className="material-symbols-outlined icon-fill text-[28px]">
-                          {feature.icon}
-                        </span>
-                      </div>
-                      <h3 className="mb-3 text-lg font-semibold text-gray-900">
-                        {feature.title}
-                      </h3>
-                      <p className="flex-1 text-sm leading-relaxed text-gray-500">
-                        {feature.description}
-                      </p>
-                      <span className="mt-6 inline-flex w-max items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
-                        {feature.tag}
-                      </span>
-                      <div className="mt-4 flex items-center text-sm font-medium text-emerald-600">
-                        Coba Fitur{' '}
-                        <span className="ml-1 transition-transform duration-300 group-hover:translate-x-1">
-                          &rarr;
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                </article>
-              ))}
-            </StaggerGroup>
-          </div>
-        </section>
 
         {/* ============ Role Showcase (pinned scroll story) ============ */}
         <RoleShowcase />
