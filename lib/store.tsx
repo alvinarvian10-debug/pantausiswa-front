@@ -49,7 +49,7 @@ export interface Guru {
 export interface Kelas {
   id: string;
   nama: string;
-  waliKelasId: string;
+  waliKelasId: string | null;
 }
 
 export type StatusPresensi = 'Hadir' | 'Sakit' | 'Izin' | 'Alpa';
@@ -376,6 +376,25 @@ interface AppDataContextValue extends AppData {
   updatePengaturan: (patch: Partial<Pengaturan>) => void;
   resetData: () => void;
 
+  // Master Data CRUD
+  addSiswa: (input: Omit<Siswa, 'id'>) => string;
+  updateSiswa: (id: string, patch: Partial<Omit<Siswa, 'id'>>) => void;
+  deleteSiswa: (id: string) => void;
+  addGuru: (input: Omit<Guru, 'id'>) => string;
+  updateGuru: (id: string, patch: Partial<Omit<Guru, 'id'>>) => void;
+  deleteGuru: (id: string) => void;
+  addKelas: (input: Omit<Kelas, 'id'>) => string;
+  updateKelas: (id: string, patch: Partial<Omit<Kelas, 'id'>>) => void;
+  deleteKelas: (id: string) => void;
+
+  /** Atomic bulk import — resolves/creates classes by name and inserts all valid rows in one update. */
+  bulkImportSiswa: (
+    rows: { nama: string; nis: string; kelasNama: string }[],
+  ) => { added: number; skipped: { row: number; reason: string }[] };
+  bulkImportGuru: (
+    rows: { nama: string; mapel: string[]; waliKelasNama: string | null }[],
+  ) => { added: number; skipped: { row: number; reason: string }[] };
+
   // Convenience lookups
   getSiswa: (id: string) => Siswa | undefined;
   getGuru: (id: string) => Guru | undefined;
@@ -622,6 +641,188 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setData(SEED);
   }, []);
 
+  // ---- Master Data CRUD ----
+  const addSiswa = useCallback<AppDataContextValue['addSiswa']>((input) => {
+    const id = uid('S');
+    setData((prev) => ({ ...prev, siswa: [...prev.siswa, { id, ...input }] }));
+    return id;
+  }, []);
+
+  const updateSiswa = useCallback<AppDataContextValue['updateSiswa']>((id, patch) => {
+    setData((prev) => ({
+      ...prev,
+      siswa: prev.siswa.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    }));
+  }, []);
+
+  const deleteSiswa = useCallback<AppDataContextValue['deleteSiswa']>((id) => {
+    setData((prev) => ({
+      ...prev,
+      siswa: prev.siswa.filter((s) => s.id !== id),
+      // Cascade cleanup so no page is left showing orphaned records for a deleted student.
+      presensi: prev.presensi.filter((p) => p.siswaId !== id),
+      izin: prev.izin.filter((i) => i.siswaId !== id),
+      peminjaman: prev.peminjaman.filter((p) => p.siswaId !== id),
+      submisi: prev.submisi.filter((s) => s.siswaId !== id),
+      aduan: prev.aduan.filter((a) => a.siswaId !== id),
+    }));
+  }, []);
+
+  const addGuru = useCallback<AppDataContextValue['addGuru']>((input) => {
+    const id = uid('G');
+    setData((prev) => ({
+      ...prev,
+      guru: [
+        ...prev.guru.map((g) =>
+          input.waliKelasId && g.waliKelasId === input.waliKelasId ? { ...g, waliKelasId: null } : g,
+        ),
+        { id, ...input },
+      ],
+    }));
+    return id;
+  }, []);
+
+  const updateGuru = useCallback<AppDataContextValue['updateGuru']>((id, patch) => {
+    setData((prev) => ({
+      ...prev,
+      guru: prev.guru.map((g) => {
+        if (g.id === id) return { ...g, ...patch };
+        if (patch.waliKelasId && g.waliKelasId === patch.waliKelasId) return { ...g, waliKelasId: null };
+        return g;
+      }),
+    }));
+  }, []);
+
+  const deleteGuru = useCallback<AppDataContextValue['deleteGuru']>((id) => {
+    setData((prev) => ({
+      ...prev,
+      guru: prev.guru.filter((g) => g.id !== id),
+      // Any class this teacher was homeroom-assigned to loses that assignment
+      // rather than pointing at a deleted teacher.
+      kelas: prev.kelas.map((k) => (k.waliKelasId === id ? { ...k, waliKelasId: null } : k)),
+      tugas: prev.tugas.filter((t) => t.guruId !== id),
+      riwayatGuru: prev.riwayatGuru.filter((r) => r.guruId !== id),
+    }));
+  }, []);
+
+  const addKelas = useCallback<AppDataContextValue['addKelas']>((input) => {
+    const id = uid('K');
+    setData((prev) => ({ ...prev, kelas: [...prev.kelas, { id, ...input }] }));
+    return id;
+  }, []);
+
+  const updateKelas = useCallback<AppDataContextValue['updateKelas']>((id, patch) => {
+    setData((prev) => ({
+      ...prev,
+      kelas: prev.kelas.map((k) => (k.id === id ? { ...k, ...patch } : k)),
+    }));
+  }, []);
+
+  const deleteKelas = useCallback<AppDataContextValue['deleteKelas']>((id) => {
+    setData((prev) => ({
+      ...prev,
+      kelas: prev.kelas.filter((k) => k.id !== id),
+    }));
+  }, []);
+
+  const TONE_CYCLE: AvatarTone[] = ['emerald', 'blue', 'amber', 'red', 'slate'];
+
+  const bulkImportSiswa = useCallback<AppDataContextValue['bulkImportSiswa']>((rows) => {
+    let added = 0;
+    const skipped: { row: number; reason: string }[] = [];
+
+    setData((prev) => {
+      const nextKelas = [...prev.kelas];
+      const nextSiswa = [...prev.siswa];
+      const existingNis = new Set(prev.siswa.map((s) => s.nis));
+
+      rows.forEach((row, idx) => {
+        const nama = row.nama?.trim();
+        const nis = row.nis != null ? String(row.nis).trim() : '';
+        const kelasNama = row.kelasNama?.trim();
+
+        if (!nama || !nis || !kelasNama) {
+          skipped.push({ row: idx + 2, reason: 'Nama, NIS, atau Kelas kosong' });
+          return;
+        }
+        if (existingNis.has(nis)) {
+          skipped.push({ row: idx + 2, reason: `NIS ${nis} sudah terdaftar` });
+          return;
+        }
+
+        let kelasRecord = nextKelas.find((k) => k.nama.toLowerCase() === kelasNama.toLowerCase());
+        if (!kelasRecord) {
+          kelasRecord = { id: uid('K'), nama: kelasNama, waliKelasId: null };
+          nextKelas.push(kelasRecord);
+        }
+
+        nextSiswa.push({
+          id: uid('S'),
+          nama,
+          nis,
+          kelasId: kelasRecord.id,
+          tone: TONE_CYCLE[nextSiswa.length % TONE_CYCLE.length],
+        });
+        existingNis.add(nis);
+        added += 1;
+      });
+
+      return { ...prev, kelas: nextKelas, siswa: nextSiswa };
+    });
+
+    return { added, skipped };
+  }, []);
+
+  const bulkImportGuru = useCallback<AppDataContextValue['bulkImportGuru']>((rows) => {
+    let added = 0;
+    const skipped: { row: number; reason: string }[] = [];
+
+    setData((prev) => {
+      const nextKelas = [...prev.kelas];
+      const nextGuru = [...prev.guru];
+
+      rows.forEach((row, idx) => {
+        const nama = row.nama?.trim();
+        const mapel = (row.mapel ?? []).map((m) => m.trim()).filter(Boolean);
+
+        if (!nama || mapel.length === 0) {
+          skipped.push({ row: idx + 2, reason: 'Nama atau Mata Pelajaran kosong' });
+          return;
+        }
+
+        let waliKelasId: string | null = null;
+        if (row.waliKelasNama && row.waliKelasNama.trim()) {
+          const kelasNama = row.waliKelasNama.trim();
+          let kelasRecord = nextKelas.find((k) => k.nama.toLowerCase() === kelasNama.toLowerCase());
+          if (!kelasRecord) {
+            kelasRecord = { id: uid('K'), nama: kelasNama, waliKelasId: null };
+            nextKelas.push(kelasRecord);
+          }
+          kelasRecord.waliKelasId = null; // resolved to the new guru id below
+          waliKelasId = kelasRecord.id;
+        }
+
+        const guruId = uid('G');
+        nextGuru.push({
+          id: guruId,
+          nama,
+          mapel,
+          waliKelasId,
+          tone: TONE_CYCLE[nextGuru.length % TONE_CYCLE.length],
+        });
+        if (waliKelasId) {
+          const idx2 = nextKelas.findIndex((k) => k.id === waliKelasId);
+          if (idx2 >= 0) nextKelas[idx2] = { ...nextKelas[idx2], waliKelasId: guruId };
+        }
+        added += 1;
+      });
+
+      return { ...prev, kelas: nextKelas, guru: nextGuru };
+    });
+
+    return { added, skipped };
+  }, []);
+
   const getSiswa = useCallback((id: string) => data.siswa.find((s) => s.id === id), [data.siswa]);
   const getGuru = useCallback((id: string) => data.guru.find((g) => g.id === id), [data.guru]);
   const getKelas = useCallback((id: string) => data.kelas.find((k) => k.id === id), [data.kelas]);
@@ -646,6 +847,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       tambahRiwayatGuru,
       updatePengaturan,
       resetData,
+      addSiswa,
+      updateSiswa,
+      deleteSiswa,
+      addGuru,
+      updateGuru,
+      deleteGuru,
+      addKelas,
+      updateKelas,
+      deleteKelas,
+      bulkImportSiswa,
+      bulkImportGuru,
       getSiswa,
       getGuru,
       getKelas,
@@ -655,7 +867,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       data, ajukanIzin, prosesIzin, checkIn, ajukanPeminjaman, kembalikanPeminjaman,
       tambahFasilitas, updateKondisiFasilitas, buatTugas, submitTugas, nilaiSubmisi,
       buatAduan, siklusStatusAduan, tanggapiAduan, tambahRiwayatGuru, updatePengaturan,
-      resetData, getSiswa, getGuru, getKelas, getFasilitas,
+      resetData, addSiswa, updateSiswa, deleteSiswa, addGuru, updateGuru, deleteGuru,
+      addKelas, updateKelas, deleteKelas, bulkImportSiswa, bulkImportGuru,
+      getSiswa, getGuru, getKelas, getFasilitas,
     ],
   );
 
