@@ -6,10 +6,10 @@ import { useState } from 'react';
 import { setSession } from '../../lib/auth';
 
 const DEMO_ROLES = [
-  { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face' },
-  { href: '/dashboard/guru', label: 'Guru', icon: 'co_present' },
-  { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings' },
-  { href: '/dashboard/secretary', label: 'Sekretaris', icon: 'badge' },
+  { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face', role: 'student' as const },
+  { href: '/dashboard/guru', label: 'Guru', icon: 'co_present', role: 'guru' as const },
+  { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings', role: 'admin' as const },
+  { href: '/dashboard/secretary', label: 'Sekretaris', icon: 'badge', role: 'secretary' as const },
 ] as const;
 
 export default function LoginPage() {
@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [showForgotNotice, setShowForgotNotice] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<(typeof DEMO_ROLES)[number]['role'] | null>(null);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -30,7 +31,29 @@ export default function LoginPage() {
       { username: 'sekretaris.xipa1', password: 'sekretaris123', role: 'secretary' as const, href: '/dashboard/secretary', secretaryId: 'SK-01' },
       { username: 'sekretaris.xipa2', password: 'sekretaris123', role: 'secretary' as const, href: '/dashboard/secretary', secretaryId: 'SK-02' },
     ];
-    const account = users.find((u) => u.username === identifier.trim() && u.password === password);
+    const account = users.find((u) => u.username === identifier.trim());
+
+    if (!selectedRole) {
+      setError('Silakan pilih peran login terlebih dahulu.');
+      return;
+    }
+
+    if (!account) {
+      setError('Username tidak terdaftar. Periksa kembali username Anda.');
+      return;
+    }
+
+    if (account.role !== selectedRole) {
+      const roleLabel = DEMO_ROLES.find((role) => role.role === account.role)?.label ?? 'yang sesuai';
+      setError(`Username tersebut terdaftar sebagai ${roleLabel}. Pilih peran ${roleLabel} untuk melanjutkan.`);
+      return;
+    }
+
+    if (account.password !== password) {
+      setError('Password salah. Silakan periksa kembali password Anda.');
+      return;
+    }
+
     if (account) {
       setSession({
         role: account.role,
@@ -191,19 +214,40 @@ export default function LoginPage() {
               Mode Demo — Pilih Peran
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {DEMO_ROLES.map((role) => (
-                <Link
-                  key={role.href}
-                  href={role.href}
-                  className="group flex flex-col items-center gap-1.5 rounded-xl border border-emerald-100 bg-white/60 px-2 py-3 text-emerald-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 active:scale-95"
-                >
-                  <span className="material-symbols-outlined icon-fill text-[22px] text-emerald-500 transition-transform duration-200 group-hover:scale-110">
-                    {role.icon}
-                  </span>
-                  <span className="text-xs font-semibold">{role.label}</span>
-                </Link>
-              ))}
+              {DEMO_ROLES.map((role) => {
+                const isSelected = selectedRole === role.role;
+
+                return (
+                  <button
+                    key={role.href}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => {
+                      setSelectedRole(role.role);
+                      setError('');
+                    }}
+                    className={`group flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 shadow-sm transition-all duration-200 active:scale-95 ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500/20 shadow-md'
+                        : 'border-emerald-100 bg-white/60 text-emerald-700 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined icon-fill text-[22px] transition-transform duration-200 ${
+                        isSelected ? 'scale-110 text-emerald-600' : 'text-emerald-500 group-hover:scale-110'
+                      }`}
+                    >
+                      {role.icon}
+                    </span>
+                    <span className="text-xs font-semibold">{role.label}</span>
+                    {isSelected && <span className="text-[10px] font-medium text-emerald-600">Terpilih</span>}
+                  </button>
+                );
+              })}
             </div>
+            <p className="mt-3 text-center text-[11px] text-gray-400">
+              Pilih peran sesuai akun sebelum menekan tombol Masuk.
+            </p>
           </div>
         </div>
 
