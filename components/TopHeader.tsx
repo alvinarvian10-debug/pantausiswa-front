@@ -13,12 +13,13 @@ const HEADER_META: Record<Role, { subtitle: string }> = {
   student: { subtitle: 'Semangat belajar hari ini!' },
   guru: { subtitle: 'Kelola kelas dan pengajaran Anda' },
   admin: { subtitle: 'Ringkasan operasional sekolah' },
+  secretary: { subtitle: 'Kelola presensi kelas Anda' },
 };
 
 export default function TopHeader({ role, onMenuClick }: TopHeaderProps) {
   const user = useRoleUser(role);
   const meta = HEADER_META[role];
-  const title = role === 'student' ? `Selamat Datang, ${user.name}` : role === 'guru' ? 'Dashboard Guru' : 'Dashboard Admin';
+  const title = role === 'student' ? `Selamat Datang, ${user.name}` : role === 'guru' ? 'Dashboard Guru' : role === 'secretary' ? 'Presensi Kelas' : 'Dashboard Admin';
   const today = new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
     day: 'numeric',

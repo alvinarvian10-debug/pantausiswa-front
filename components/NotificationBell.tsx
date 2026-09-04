@@ -89,6 +89,10 @@ export default function NotificationBell({ role }: { role: Role }) {
       return [...izinUpdates, ...nilaiBaru, ...tanggapanAduan].slice(0, 8);
     }
 
+    if (role === 'secretary') {
+      return [];
+    }
+
     if (role === 'guru') {
       const pending = izin
         .filter((i) => i.status === 'Menunggu')
