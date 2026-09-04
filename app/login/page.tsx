@@ -8,6 +8,7 @@ const DEMO_ROLES = [
   { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face' },
   { href: '/dashboard/guru', label: 'Guru', icon: 'co_present' },
   { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings' },
+  { href: '/dashboard/secretary', label: 'Sekretaris', icon: 'badge' },
 ] as const;
 
 export default function LoginPage() {
@@ -18,7 +19,22 @@ export default function LoginPage() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    router.push('/dashboard/admin');
+    const users = [
+      { username: 'admin', password: 'admin123', href: '/dashboard/admin' },
+      { username: 'guru', password: 'guru123', href: '/dashboard/guru' },
+      { username: 'siswa', password: 'siswa123', href: '/dashboard/student/beranda' },
+      { username: 'sekretaris.xipa1', password: 'sekretaris123', href: '/dashboard/secretary' },
+      { username: 'sekretaris.xipa2', password: 'sekretaris123', href: '/dashboard/secretary?kelas=K-02' },
+    ];
+    const account = users.find((u) => u.username === identifier.trim() && u.password === password);
+    if (account) {
+      if (account.href.startsWith('/dashboard/secretary')) {
+        const secretaryId = account.username.endsWith('xipa2') ? 'SK-02' : 'SK-01';
+        window.localStorage.setItem('pantausiswa.session', JSON.stringify({ role: 'secretary', secretaryId }));
+      }
+      router.push(account.href);
+    }
+    else window.alert('Username atau password salah.');
   };
 
   const inputClasses =
@@ -151,7 +167,7 @@ export default function LoginPage() {
             <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
               Mode Demo — Pilih Peran
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {DEMO_ROLES.map((role) => (
                 <Link
                   key={role.href}

@@ -16,7 +16,9 @@ export default function DashboardLayout({
     ? 'guru'
     : pathname.includes('/admin')
       ? 'admin'
-      : 'student';
+      : pathname.includes('/secretary')
+        ? 'secretary'
+        : 'student';
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {

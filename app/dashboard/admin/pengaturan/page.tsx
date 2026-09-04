@@ -6,7 +6,7 @@ import ScrollReveal from '../../../../components/ScrollReveal';
 import { useAppData } from '../../../../lib/store';
 
 export default function PengaturanPage() {
-  const { pengaturan, updatePengaturan } = useAppData();
+  const { pengaturan, updatePengaturan, permintaanPassword, sekretaris, getKelas, prosesGantiPassword } = useAppData();
   const [form, setForm] = useState(pengaturan);
   const [saved, setSaved] = useState(false);
 
@@ -33,6 +33,36 @@ export default function PengaturanPage() {
           <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
           Pengaturan berhasil disimpan.
         </div>
+      )}
+
+      {permintaanPassword.some((r) => r.status === 'Menunggu') && (
+        <ScrollReveal delay={0.03}>
+          <GlassCard className="p-6">
+            <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <span className="material-symbols-outlined icon-fill text-emerald-600">admin_panel_settings</span>
+              Persetujuan Ganti Password Sekretaris
+            </h2>
+            <p className="mb-5 text-sm text-gray-500">Konfirmasi perubahan password akun sekretaris kelas sebelum password baru berlaku.</p>
+            <div className="flex flex-col gap-3">
+              {permintaanPassword.filter((r) => r.status === 'Menunggu').map((request) => {
+                const account = sekretaris.find((a) => a.id === request.sekretarisId);
+                const kelas = account ? getKelas(account.kelasId) : undefined;
+                return (
+                  <div key={request.id} className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-900">{account?.username ?? '-'} · {kelas?.nama ?? '-'}</p>
+                      <p className="mt-1 text-xs text-gray-400">Diajukan {new Date(request.diajukanPada).toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => prosesGantiPassword(request.id, 'Ditolak')} className="rounded-lg border border-red-100 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">Tolak</button>
+                      <button type="button" onClick={() => prosesGantiPassword(request.id, 'Disetujui')} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Setujui</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </GlassCard>
+        </ScrollReveal>
       )}
 
       <form className="flex flex-col gap-6" onSubmit={handleSave}>
