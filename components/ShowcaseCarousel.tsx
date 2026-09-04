@@ -143,7 +143,7 @@ export default function ShowcaseCarousel() {
   );
 
   return (
-    <section className="px-6 py-16 md:py-24">
+    <section className="px-6 py-16 md:py-24" id="fitur">
       <div className="mx-auto mb-12 max-w-2xl text-center">
         <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-emerald-600">
           Jelajahi Fitur

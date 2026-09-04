@@ -46,6 +46,23 @@ export interface Guru {
   tone: AvatarTone;
 }
 
+export interface SekretarisAccount {
+  id: string;
+  nama: string;
+  username: string;
+  password: string;
+  kelasId: string;
+}
+
+export interface PasswordChangeRequest {
+  id: string;
+  sekretarisId: string;
+  passwordBaru: string;
+  diajukanPada: string;
+  status: 'Menunggu' | 'Disetujui' | 'Ditolak';
+  diprosesPada: string | null;
+}
+
 export interface Kelas {
   id: string;
   nama: string;
@@ -175,6 +192,8 @@ export interface Pengaturan {
 interface AppData {
   siswa: Siswa[];
   guru: Guru[];
+  sekretaris: SekretarisAccount[];
+  permintaanPassword: PasswordChangeRequest[];
   kelas: Kelas[];
   presensi: PresensiRecord[];
   izin: IzinRequest[];
@@ -205,6 +224,11 @@ const SEED: AppData = {
     { id: 'G-01', nama: 'Bapak Hendra Wijaya', mapel: ['Matematika'], waliKelasId: 'K-01', tone: 'emerald' },
     { id: 'G-02', nama: 'Ibu Ratna Sari', mapel: ['Bahasa Inggris'], waliKelasId: 'K-02', tone: 'amber' },
   ],
+  sekretaris: [
+    { id: 'SK-01', nama: 'Sekretaris X IPA 1', username: 'sekretaris.xipa1', password: 'sekretaris123', kelasId: 'K-01' },
+    { id: 'SK-02', nama: 'Sekretaris X IPA 2', username: 'sekretaris.xipa2', password: 'sekretaris123', kelasId: 'K-02' },
+  ],
+  permintaanPassword: [],
   kelas: [
     { id: 'K-01', nama: 'X IPA 1', waliKelasId: 'G-01' },
     { id: 'K-02', nama: 'X IPA 2', waliKelasId: 'G-02' },
@@ -312,6 +336,7 @@ const STORAGE_KEY = 'pantausiswa.appdata.v1';
 export const CURRENT_SISWA_ID = 'S-01';
 // Teacher the app currently "sits as" (wali kelas X IPA 1).
 export const CURRENT_GURU_ID = 'G-01';
+export const CURRENT_SEKRETARIS_ID = 'SK-01';
 
 function loadInitial(): AppData {
   if (typeof window === 'undefined') return SEED;
@@ -350,6 +375,9 @@ interface AppDataContextValue extends AppData {
   }) => void;
   prosesIzin: (izinId: string, keputusan: 'Disetujui' | 'Ditolak', alasanTolak?: string) => void;
   checkIn: (siswaId: string) => void;
+  catatPresensi: (sekretarisId: string, input: { siswaId: string; status: StatusPresensi; keterangan?: string }) => void;
+  ajukanGantiPassword: (sekretarisId: string, passwordBaru: string) => void;
+  prosesGantiPassword: (requestId: string, keputusan: 'Disetujui' | 'Ditolak') => void;
 
   ajukanPeminjaman: (input: { siswaId: string; fasilitasId: string; keperluan: string; batasKembali: string }) => void;
   kembalikanPeminjaman: (peminjamanId: string) => void;
@@ -485,6 +513,55 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           },
           ...prev.presensi,
         ],
+      };
+    });
+  }, []);
+
+  const catatPresensi = useCallback<AppDataContextValue['catatPresensi']>((sekretarisId, input) => {
+    setData((prev) => {
+      const account = prev.sekretaris.find((a) => a.id === sekretarisId);
+      const student = prev.siswa.find((s) => s.id === input.siswaId);
+      if (!account || !student || account.kelasId !== student.kelasId) return prev;
+      const today = new Date().toISOString().slice(0, 10);
+      const existing = prev.presensi.find((p) => p.siswaId === input.siswaId && p.tanggal === today);
+      const record: PresensiRecord = {
+        id: existing?.id ?? uid('P'),
+        siswaId: input.siswaId,
+        tanggal: today,
+        waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }),
+        status: input.status,
+        keterangan: input.keterangan?.trim() || 'Dicatat oleh sekretaris kelas',
+      };
+      return {
+        ...prev,
+        presensi: existing
+          ? prev.presensi.map((p) => (p.id === existing.id ? record : p))
+          : [record, ...prev.presensi],
+      };
+    });
+  }, []);
+
+  const ajukanGantiPassword = useCallback<AppDataContextValue['ajukanGantiPassword']>((sekretarisId, passwordBaru) => {
+    if (!passwordBaru.trim()) return;
+    setData((prev) => ({
+      ...prev,
+      permintaanPassword: [
+        { id: uid('PR'), sekretarisId, passwordBaru: passwordBaru.trim(), diajukanPada: nowIso(), status: 'Menunggu', diprosesPada: null },
+        ...prev.permintaanPassword.filter((r) => !(r.sekretarisId === sekretarisId && r.status === 'Menunggu')),
+      ],
+    }));
+  }, []);
+
+  const prosesGantiPassword = useCallback<AppDataContextValue['prosesGantiPassword']>((requestId, keputusan) => {
+    setData((prev) => {
+      const req = prev.permintaanPassword.find((r) => r.id === requestId);
+      if (!req || req.status !== 'Menunggu') return prev;
+      return {
+        ...prev,
+        sekretaris: keputusan === 'Disetujui'
+          ? prev.sekretaris.map((a) => a.id === req.sekretarisId ? { ...a, password: req.passwordBaru } : a)
+          : prev.sekretaris,
+        permintaanPassword: prev.permintaanPassword.map((r) => r.id === requestId ? { ...r, status: keputusan, diprosesPada: nowIso() } : r),
       };
     });
   }, []);
@@ -834,6 +911,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ajukanIzin,
       prosesIzin,
       checkIn,
+      catatPresensi,
+      ajukanGantiPassword,
+      prosesGantiPassword,
       ajukanPeminjaman,
       kembalikanPeminjaman,
       tambahFasilitas,
@@ -864,7 +944,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       getFasilitas,
     }),
     [
-      data, ajukanIzin, prosesIzin, checkIn, ajukanPeminjaman, kembalikanPeminjaman,
+      data, ajukanIzin, prosesIzin, checkIn, catatPresensi, ajukanGantiPassword, prosesGantiPassword, ajukanPeminjaman, kembalikanPeminjaman,
       tambahFasilitas, updateKondisiFasilitas, buatTugas, submitTugas, nilaiSubmisi,
       buatAduan, siklusStatusAduan, tanggapiAduan, tambahRiwayatGuru, updatePengaturan,
       resetData, addSiswa, updateSiswa, deleteSiswa, addGuru, updateGuru, deleteGuru,

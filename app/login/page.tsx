@@ -3,22 +3,37 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-
-const DEMO_ROLES = [
-  { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face' },
-  { href: '/dashboard/guru', label: 'Guru', icon: 'co_present' },
-  { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings' },
-] as const;
+import { setSession } from '../../lib/auth';
 
 export default function LoginPage() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [showForgotNotice, setShowForgotNotice] = useState(false);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    router.push('/dashboard/admin');
+    setError('');
+    const users = [
+      { username: 'admin', password: 'admin123', role: 'admin' as const, href: '/dashboard/admin' },
+      { username: 'guru', password: 'guru123', role: 'guru' as const, href: '/dashboard/guru' },
+      { username: 'siswa', password: 'siswa123', role: 'student' as const, href: '/dashboard/student/beranda' },
+      { username: 'sekretaris.xipa1', password: 'sekretaris123', role: 'secretary' as const, href: '/dashboard/secretary', secretaryId: 'SK-01' },
+      { username: 'sekretaris.xipa2', password: 'sekretaris123', role: 'secretary' as const, href: '/dashboard/secretary', secretaryId: 'SK-02' },
+    ];
+    const account = users.find((u) => u.username === identifier.trim() && u.password === password);
+    if (account) {
+      setSession({
+        role: account.role,
+        username: account.username,
+        ...(account.secretaryId ? { secretaryId: account.secretaryId } : {}),
+      });
+      router.push(account.href);
+    } else {
+      setError('Username atau password salah.');
+    }
   };
 
   const inputClasses =
@@ -67,6 +82,12 @@ export default function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+                <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+                {error}
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700" htmlFor="identifier">
                 Email / NIS / NIP
@@ -129,13 +150,24 @@ export default function LoginPage() {
                   />
                   Ingat saya
                 </label>
-                <a
+                <button
+                  type="button"
+                  onClick={() => setShowForgotNotice(true)}
                   className="text-sm font-medium text-emerald-600 transition-colors hover:text-emerald-700"
-                  href="#"
                 >
                   Lupa password?
-                </a>
+                </button>
               </div>
+
+              {showForgotNotice && (
+                <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700 ring-1 ring-inset ring-blue-100">
+                  <span className="material-symbols-outlined icon-fill mt-0.5 text-[18px]">info</span>
+                  <p>
+                    Untuk reset password, silakan hubungi Admin sekolah — perubahan
+                    password harus dikonfirmasi langsung oleh Admin demi keamanan akun.
+                  </p>
+                </div>
+              )}
             </div>
 
             <button
@@ -145,27 +177,6 @@ export default function LoginPage() {
               Masuk
             </button>
           </form>
-
-          {/* Demo routing */}
-          <div className="border-t border-gray-100/80 pt-6">
-            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
-              Mode Demo — Pilih Peran
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              {DEMO_ROLES.map((role) => (
-                <Link
-                  key={role.href}
-                  href={role.href}
-                  className="group flex flex-col items-center gap-1.5 rounded-xl border border-emerald-100 bg-white/60 px-2 py-3 text-emerald-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 active:scale-95"
-                >
-                  <span className="material-symbols-outlined icon-fill text-[22px] text-emerald-500 transition-transform duration-200 group-hover:scale-110">
-                    {role.icon}
-                  </span>
-                  <span className="text-xs font-semibold">{role.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">

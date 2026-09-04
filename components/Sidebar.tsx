@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Avatar from './Avatar';
-import { CURRENT_GURU_ID, CURRENT_SISWA_ID, useAppData } from '../lib/store';
+import { CURRENT_GURU_ID, CURRENT_SISWA_ID, CURRENT_SEKRETARIS_ID, useAppData } from '../lib/store';
+import { clearSession } from '../lib/auth';
 
-export type Role = 'student' | 'guru' | 'admin';
+export type Role = 'student' | 'guru' | 'admin' | 'secretary';
 
 interface NavItem {
   href: string;
@@ -37,11 +38,6 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
         exact: true,
       },
       {
-        href: '/dashboard/student/presensi',
-        label: 'Presensi & Izin',
-        icon: 'how_to_reg',
-      },
-      {
         href: '/dashboard/student/peminjaman',
         label: 'Peminjaman Fasilitas',
         icon: 'business_center',
@@ -50,6 +46,13 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
       { href: '/dashboard/student/aduan', label: 'Aduan', icon: 'campaign' },
     ],
     quickLink: { href: '/dashboard/student/aduan', label: 'Lapor Kendala' },
+  },
+  secretary: {
+    portalLabel: 'Portal Sekretaris Kelas',
+    items: [
+      { href: '/dashboard/secretary', label: 'Presensi Kelas', icon: 'how_to_reg', exact: true },
+      { href: '/dashboard/secretary/password', label: 'Ganti Password', icon: 'lock' },
+    ],
   },
   guru: {
     portalLabel: 'Portal Guru',
@@ -118,11 +121,23 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
 };
 
 export function useRoleUser(role: Role): { name: string; subtitle: string } {
-  const { getSiswa, getGuru, getKelas } = useAppData();
+  const { getSiswa, getGuru, getKelas, sekretaris } = useAppData();
   if (role === 'student') {
     const s = getSiswa(CURRENT_SISWA_ID);
     const kelas = s ? getKelas(s.kelasId) : undefined;
     return { name: s?.nama ?? 'Siswa', subtitle: kelas?.nama ?? '-' };
+  }
+  if (role === 'secretary') {
+    let secretaryId = CURRENT_SEKRETARIS_ID;
+    if (typeof window !== 'undefined') {
+      try {
+        const session = JSON.parse(window.localStorage.getItem('pantausiswa.session') ?? '{}');
+        if (session.secretaryId) secretaryId = session.secretaryId;
+      } catch {}
+    }
+    const account = sekretaris.find((a) => a.id === secretaryId);
+    const kelas = account ? getKelas(account.kelasId) : undefined;
+    return { name: account?.nama ?? 'Sekretaris Kelas', subtitle: kelas?.nama ?? '-' };
   }
   if (role === 'guru') {
     const g = getGuru(CURRENT_GURU_ID);
@@ -141,6 +156,7 @@ interface SidebarProps {
 export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
   const config = NAV_CONFIG[role];
   const user = useRoleUser(role);
+  const router = useRouter();
 
   return (
     <>
@@ -222,16 +238,20 @@ export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
             </div>
           </div>
 
-          <Link
-            href="/login"
-            onClick={onClose}
+          <button
+            type="button"
+            onClick={() => {
+              clearSession();
+              onClose();
+              router.push('/login');
+            }}
             className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-500 transition-colors hover:bg-red-50"
           >
             <span className="material-symbols-outlined text-[20px]">
               logout
             </span>
             Keluar
-          </Link>
+          </button>
         </div>
       </nav>
     </>

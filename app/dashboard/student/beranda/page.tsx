@@ -8,7 +8,7 @@ import StaggerGroup from '../../../../components/StaggerGroup';
 import { CURRENT_SISWA_ID, useAppData } from '../../../../lib/store';
 
 export default function StudentDashboard() {
-  const { presensi, izin, tugas, submisi, peminjaman, getSiswa, getFasilitas, checkIn } = useAppData();
+  const { presensi, izin, tugas, submisi, peminjaman, getSiswa, getFasilitas } = useAppData();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -70,28 +70,14 @@ export default function StudentDashboard() {
               </h3>
               <p className="max-w-md text-sm leading-relaxed text-gray-500">
                 {sudahHadir
-                  ? 'Presensimu hari ini sudah tercatat. Semangat belajar!'
-                  : 'Silakan lakukan presensi kedatangan untuk mencatat kehadiran Anda pada sistem.'}
+                  ? 'Presensimu hari ini sudah tercatat oleh sekretaris kelas. Semangat belajar!'
+                  : 'Presensi kehadiran dikelola oleh sekretaris kelas. Hubungi sekretaris jika ada kesalahan data.'}
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                {sudahHadir ? (
-                  <Link
-                    href="/dashboard/student/presensi"
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
-                  >
-                    <span className="material-symbols-outlined icon-fill text-[20px]">task_alt</span>
-                    Lihat Presensi
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => checkIn(CURRENT_SISWA_ID)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
-                  >
-                    <span className="material-symbols-outlined icon-fill text-[20px]">fingerprint</span>
-                    Check-In Sekarang
-                  </button>
-                )}
+                <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-6 py-3 text-sm font-semibold text-slate-600">
+                  <span className="material-symbols-outlined icon-fill text-[20px]">how_to_reg</span>
+                  Presensi dikelola sekretaris kelas
+                </span>
                 <Link
                   href="/dashboard/student/peminjaman"
                   className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white/70 px-6 py-3 text-sm font-semibold text-emerald-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-50"
