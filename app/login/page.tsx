@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { setSession } from '../../lib/auth';
 
+const DEMO_ROLES = [
+  { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face' },
+  { href: '/dashboard/guru', label: 'Guru', icon: 'co_present' },
+  { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings' },
+  { href: '/dashboard/secretary', label: 'Sekretaris', icon: 'badge' },
+] as const;
+
 export default function LoginPage() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState('');
@@ -34,6 +41,22 @@ export default function LoginPage() {
     } else {
       setError('Username atau password salah.');
     }
+    const users = [
+      { username: 'admin', password: 'admin123', href: '/dashboard/admin' },
+      { username: 'guru', password: 'guru123', href: '/dashboard/guru' },
+      { username: 'siswa', password: 'siswa123', href: '/dashboard/student/beranda' },
+      { username: 'sekretaris.xipa1', password: 'sekretaris123', href: '/dashboard/secretary' },
+      { username: 'sekretaris.xipa2', password: 'sekretaris123', href: '/dashboard/secretary?kelas=K-02' },
+    ];
+    const account = users.find((u) => u.username === identifier.trim() && u.password === password);
+    if (account) {
+      if (account.href.startsWith('/dashboard/secretary')) {
+        const secretaryId = account.username.endsWith('xipa2') ? 'SK-02' : 'SK-01';
+        window.localStorage.setItem('pantausiswa.session', JSON.stringify({ role: 'secretary', secretaryId }));
+      }
+      router.push(account.href);
+    }
+    else window.alert('Username atau password salah.');
   };
 
   const inputClasses =
@@ -177,6 +200,27 @@ export default function LoginPage() {
               Masuk
             </button>
           </form>
+
+          {/* Demo routing */}
+          <div className="border-t border-gray-100/80 pt-6">
+            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
+              Mode Demo — Pilih Peran
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {DEMO_ROLES.map((role) => (
+                <Link
+                  key={role.href}
+                  href={role.href}
+                  className="group flex flex-col items-center gap-1.5 rounded-xl border border-emerald-100 bg-white/60 px-2 py-3 text-emerald-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 active:scale-95"
+                >
+                  <span className="material-symbols-outlined icon-fill text-[22px] text-emerald-500 transition-transform duration-200 group-hover:scale-110">
+                    {role.icon}
+                  </span>
+                  <span className="text-xs font-semibold">{role.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
