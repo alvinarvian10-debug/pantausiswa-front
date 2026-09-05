@@ -20,49 +20,46 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showForgotNotice, setShowForgotNotice] = useState(false);
   const [selectedRole, setSelectedRole] = useState<(typeof DEMO_ROLES)[number]['role'] | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (saving) return;
     setError('');
-    const users = [
-      { username: 'admin', password: 'admin123', role: 'admin' as const, href: '/dashboard/admin' },
-      { username: 'guru', password: 'guru123', role: 'guru' as const, href: '/dashboard/guru' },
-      { username: 'siswa', password: 'siswa123', role: 'student' as const, href: '/dashboard/student/beranda' },
-      { username: 'sekretaris.xipa1', password: 'sekretaris123', role: 'secretary' as const, href: '/dashboard/secretary', secretaryId: 'SK-01' },
-      { username: 'sekretaris.xipa2', password: 'sekretaris123', role: 'secretary' as const, href: '/dashboard/secretary', secretaryId: 'SK-02' },
-    ];
-    const account = users.find((u) => u.username === identifier.trim());
 
     if (!selectedRole) {
       setError('Silakan pilih peran login terlebih dahulu.');
       return;
     }
 
-    if (!account) {
-      setError('Username tidak terdaftar. Periksa kembali username Anda.');
-      return;
-    }
-
-    if (account.role !== selectedRole) {
-      const roleLabel = DEMO_ROLES.find((role) => role.role === account.role)?.label ?? 'yang sesuai';
-      setError(`Username tersebut terdaftar sebagai ${roleLabel}. Pilih peran ${roleLabel} untuk melanjutkan.`);
-      return;
-    }
-
-    if (account.password !== password) {
-      setError('Password salah. Silakan periksa kembali password Anda.');
-      return;
-    }
-
-    if (account) {
-      setSession({
-        role: account.role,
-        username: account.username,
-        ...(account.secretaryId ? { secretaryId: account.secretaryId } : {}),
+    // Kredensial dicek ke database XAMPP (bcrypt) — bukan lagi hardcode.
+    setSaving(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: identifier.trim(),
+          password,
+          role: selectedRole,
+        }),
       });
-      router.push(account.href);
-    } else {
-      setError('Username atau password salah.');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? 'Username atau password salah.');
+        return;
+      }
+      // Cache sesi untuk UI client; penegakan akses oleh cookie HttpOnly + middleware.
+      setSession({
+        role: data.user.role,
+        username: data.user.username,
+        ...(data.user.secretaryId ? { secretaryId: data.user.secretaryId } : {}),
+      });
+      router.push(data.href);
+    } catch {
+      setError('Tidak dapat menghubungi server. Pastikan aplikasi dan MySQL XAMPP jalan.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -201,10 +198,11 @@ export default function LoginPage() {
             </div>
 
             <button
-              className="w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95"
+              className="w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-semibold text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
               type="submit"
+              disabled={saving}
             >
-              Masuk
+              {saving ? 'Memeriksa...' : 'Masuk'}
             </button>
           </form>
 

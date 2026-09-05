@@ -33,6 +33,7 @@ export default function AduanPage() {
     () => aduan.filter((a) => a.siswaId === CURRENT_SISWA_ID),
     [aduan],
   );
+  const [dbError, setDbError] = useState('');
 
   const stats = useMemo(() => {
     const total = myAduan.length;
@@ -50,26 +51,50 @@ export default function AduanPage() {
     return myAduan.filter((a) => a.status === filter);
   }, [myAduan, filter]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting || !form.judul.trim() || !form.deskripsi.trim()) return;
     setSubmitting(true);
-    setTimeout(() => {
-      buatAduan({
-        siswaId: CURRENT_SISWA_ID,
-        jenis: form.jenis,
-        fasilitasId: form.jenis === 'Fasilitas' ? form.fasilitasId : null,
-        judul: form.judul.trim(),
-        deskripsi: form.deskripsi.trim(),
-        lampiranNama: form.lampiranNama,
-        isAnonim: form.isAnonim,
+    setDbError('');
+    const payload = {
+      siswaId: CURRENT_SISWA_ID,
+      jenis: form.jenis,
+      fasilitasId: form.jenis === 'Fasilitas' ? form.fasilitasId : null,
+      judul: form.judul.trim(),
+      deskripsi: form.deskripsi.trim(),
+      lampiranNama: form.lampiranNama,
+      isAnonim: form.isAnonim,
+    };
+    // 1) Simpan ke MySQL XAMPP via API (agar masuk database).
+    //    Pakai id baris DB sebagai id lokal supaya PATCH admin cocok.
+    let dbId: string | undefined;
+    try {
+      const res = await fetch('/api/complaints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-      setSubmitting(false);
-      setOpenForm(false);
-      setSuccess(true);
-      setForm({ jenis: 'Fasilitas', fasilitasId: fasilitas[0]?.id ?? '', judul: '', deskripsi: '', isAnonim: false, lampiranNama: null });
-      setTimeout(() => setSuccess(false), 4000);
-    }, 800);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+      const saved = await res.json().catch(() => null);
+      if (saved?.id) dbId = String(saved.id);
+    } catch (err) {
+      // Jangan blokir UX: tetap simpan lokal, tapi beri tahu user DB gagal.
+      setDbError(
+        err instanceof Error
+          ? `Tersimpan lokal, tapi gagal masuk database XAMPP: ${err.message} (pastikan MySQL XAMPP jalan).`
+          : 'Tersimpan lokal, tapi gagal masuk database XAMPP.',
+      );
+    }
+    // 2) Tetap simpan ke store lokal agar UI langsung update (optimistic).
+    buatAduan(dbId ? { ...payload, id: dbId } : payload);
+    setSubmitting(false);
+    setOpenForm(false);
+    setSuccess(true);
+    setForm({ jenis: 'Fasilitas', fasilitasId: fasilitas[0]?.id ?? '', judul: '', deskripsi: '', isAnonim: false, lampiranNama: null });
+    setTimeout(() => setSuccess(false), 4000);
   };
 
   return (
@@ -116,6 +141,13 @@ export default function AduanPage() {
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
           <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
           Aduanmu berhasil dikirim dan sedang ditinjau admin.
+        </div>
+      )}
+
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
         </div>
       )}
 

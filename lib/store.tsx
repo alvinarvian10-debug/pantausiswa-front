@@ -372,20 +372,22 @@ interface AppDataContextValue extends AppData {
     tanggalSelesai: string;
     alasan: string;
     lampiranNama: string | null;
-  }) => void;
+    /** Jika diisi (id baris DB), dipakai sebagai id lokal agar PATCH guru cocok. */
+    id?: string;
+  }) => string;
   prosesIzin: (izinId: string, keputusan: 'Disetujui' | 'Ditolak', alasanTolak?: string) => void;
   checkIn: (siswaId: string) => void;
   catatPresensi: (sekretarisId: string, input: { siswaId: string; status: StatusPresensi; keterangan?: string }) => void;
   ajukanGantiPassword: (sekretarisId: string, passwordBaru: string) => void;
   prosesGantiPassword: (requestId: string, keputusan: 'Disetujui' | 'Ditolak') => void;
 
-  ajukanPeminjaman: (input: { siswaId: string; fasilitasId: string; keperluan: string; batasKembali: string }) => void;
+  ajukanPeminjaman: (input: { siswaId: string; fasilitasId: string; keperluan: string; batasKembali: string; id?: string }) => string | null;
   kembalikanPeminjaman: (peminjamanId: string) => void;
-  tambahFasilitas: (input: Omit<Fasilitas, 'id'>) => void;
+  tambahFasilitas: (input: Omit<Fasilitas, 'id'> & { id?: string }) => string;
   updateKondisiFasilitas: (fasilitasId: string, kondisi: KondisiFasilitas) => void;
 
-  buatTugas: (input: Omit<Tugas, 'id' | 'dibuatPada'>) => void;
-  submitTugas: (input: { tugasId: string; siswaId: string; tipe: TipeSubmisi; konten: string }) => void;
+  buatTugas: (input: Omit<Tugas, 'id' | 'dibuatPada'> & { id?: string }) => string;
+  submitTugas: (input: { tugasId: string; siswaId: string; tipe: TipeSubmisi; konten: string; id?: string }) => string;
   nilaiSubmisi: (submisiId: string, nilai: number, feedback: string) => void;
 
   buatAduan: (input: {
@@ -396,7 +398,9 @@ interface AppDataContextValue extends AppData {
     deskripsi: string;
     lampiranNama: string | null;
     isAnonim: boolean;
-  }) => void;
+    /** Jika diisi (id baris DB), dipakai sebagai id lokal agar PATCH admin cocok. */
+    id?: string;
+  }) => string;
   siklusStatusAduan: (aduanId: string) => void;
   tanggapiAduan: (aduanId: string, tanggapan: string) => void;
 
@@ -405,15 +409,27 @@ interface AppDataContextValue extends AppData {
   resetData: () => void;
 
   // Master Data CRUD
-  addSiswa: (input: Omit<Siswa, 'id'>) => string;
+  addSiswa: (input: Omit<Siswa, 'id'> & { id?: string }) => string;
   updateSiswa: (id: string, patch: Partial<Omit<Siswa, 'id'>>) => void;
   deleteSiswa: (id: string) => void;
-  addGuru: (input: Omit<Guru, 'id'>) => string;
+  addGuru: (input: Omit<Guru, 'id'> & { id?: string }) => string;
   updateGuru: (id: string, patch: Partial<Omit<Guru, 'id'>>) => void;
   deleteGuru: (id: string) => void;
-  addKelas: (input: Omit<Kelas, 'id'>) => string;
+  addKelas: (input: Omit<Kelas, 'id'> & { id?: string }) => string;
   updateKelas: (id: string, patch: Partial<Omit<Kelas, 'id'>>) => void;
   deleteKelas: (id: string) => void;
+
+  /** Sisipkan baris dari server (hasil impor) — cocokkan id bila sudah ada. */
+  upsertSiswa: (row: Siswa) => void;
+  upsertGuru: (row: Guru) => void;
+  upsertKelas: (row: Kelas) => void;
+  /**
+   * Migrasi baris lokal lama (id S-/G-/K-) ke id baris DB — seluruh referensi
+   * (presensi, izin, tugas, kelas, dst.) ikut ditulis ulang agar tidak yatim.
+   */
+  adopsiIdSiswa: (idLama: string, row: Siswa) => void;
+  adopsiIdGuru: (idLama: string, row: Guru) => void;
+  adopsiIdKelas: (idLama: string, row: Kelas) => void;
 
   /** Atomic bulk import — resolves/creates classes by name and inserts all valid rows in one update. */
   bulkImportSiswa: (
@@ -453,12 +469,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [data, hydrated]);
 
   const ajukanIzin = useCallback<AppDataContextValue['ajukanIzin']>((input) => {
+    const newId = input.id ?? uid('IZ');
+    const { id: _ignored, ...rest } = input;
     setData((prev) => ({
       ...prev,
       izin: [
         {
-          id: uid('IZ'),
-          ...input,
+          id: newId,
+          ...rest,
           status: 'Menunggu',
           alasanTolak: null,
           diajukanPada: nowIso(),
@@ -467,6 +485,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...prev.izin,
       ],
     }));
+    return newId;
   }, []);
 
   const prosesIzin = useCallback<AppDataContextValue['prosesIzin']>((izinId, keputusan, alasanTolak) => {
@@ -567,29 +586,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ajukanPeminjaman = useCallback<AppDataContextValue['ajukanPeminjaman']>((input) => {
-    setData((prev) => {
-      const fasilitas = prev.fasilitas.find((f) => f.id === input.fasilitasId);
-      if (!fasilitas || fasilitas.jumlahTersedia < 1) return prev;
-      return {
-        ...prev,
-        fasilitas: prev.fasilitas.map((f) =>
-          f.id === input.fasilitasId ? { ...f, jumlahTersedia: f.jumlahTersedia - 1 } : f,
-        ),
-        peminjaman: [
-          {
-            id: uid('PJ'),
-            siswaId: input.siswaId,
-            fasilitasId: input.fasilitasId,
-            keperluan: input.keperluan,
-            tanggalPinjam: new Date().toISOString().slice(0, 10),
-            batasKembali: input.batasKembali,
-            status: 'Dipinjam',
-          },
-          ...prev.peminjaman,
-        ],
-      };
-    });
-  }, []);
+    const fasilitas = data.fasilitas.find((f) => f.id === input.fasilitasId);
+    if (!fasilitas || fasilitas.jumlahTersedia < 1) return null;
+    const newId = input.id ?? uid('PJ');
+    setData((prev) => ({
+      ...prev,
+      fasilitas: prev.fasilitas.map((f) =>
+        f.id === input.fasilitasId ? { ...f, jumlahTersedia: f.jumlahTersedia - 1 } : f,
+      ),
+      peminjaman: [
+        {
+          id: newId,
+          siswaId: input.siswaId,
+          fasilitasId: input.fasilitasId,
+          keperluan: input.keperluan,
+          tanggalPinjam: new Date().toISOString().slice(0, 10),
+          batasKembali: input.batasKembali,
+          status: 'Dipinjam',
+        },
+        ...prev.peminjaman,
+      ],
+    }));
+    return newId;
+  }, [data.fasilitas]);
 
   const kembalikanPeminjaman = useCallback<AppDataContextValue['kembalikanPeminjaman']>((peminjamanId) => {
     setData((prev) => {
@@ -608,10 +627,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const tambahFasilitas = useCallback<AppDataContextValue['tambahFasilitas']>((input) => {
+    const newId = input.id ?? uid('F');
+    const { id: _ignored, ...rest } = input;
     setData((prev) => ({
       ...prev,
-      fasilitas: [{ id: uid('F'), ...input }, ...prev.fasilitas],
+      fasilitas: [{ id: newId, ...rest }, ...prev.fasilitas],
     }));
+    return newId;
   }, []);
 
   const updateKondisiFasilitas = useCallback<AppDataContextValue['updateKondisiFasilitas']>((fasilitasId, kondisi) => {
@@ -626,19 +648,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const buatTugas = useCallback<AppDataContextValue['buatTugas']>((input) => {
+    const newId = input.id ?? uid('TG');
+    const { id: _ignored, ...rest } = input;
     setData((prev) => ({
       ...prev,
-      tugas: [{ id: uid('TG'), ...input, dibuatPada: nowIso() }, ...prev.tugas],
+      tugas: [{ id: newId, ...rest, dibuatPada: nowIso() }, ...prev.tugas],
     }));
+    return newId;
   }, []);
 
   const submitTugas = useCallback<AppDataContextValue['submitTugas']>((input) => {
+    const fallbackId = input.id ?? uid('SB');
+    let resultId = fallbackId;
     setData((prev) => {
       const existingIdx = prev.submisi.findIndex(
         (s) => s.tugasId === input.tugasId && s.siswaId === input.siswaId,
       );
+      // Pertahankan id lokal yang sudah ada (agar PATCH nilai tetap cocok);
+      // untuk pengumpulan baru pakai id baris DB bila diberikan.
+      resultId = existingIdx >= 0 ? prev.submisi[existingIdx].id : fallbackId;
       const record: SubmisiTugas = {
-        id: existingIdx >= 0 ? prev.submisi[existingIdx].id : uid('SB'),
+        id: resultId,
         tugasId: input.tugasId,
         siswaId: input.siswaId,
         tipe: input.tipe,
@@ -656,6 +686,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
       return { ...prev, submisi: nextSubmisi };
     });
+    return resultId;
   }, []);
 
   const nilaiSubmisi = useCallback<AppDataContextValue['nilaiSubmisi']>((submisiId, nilai, feedback) => {
@@ -668,12 +699,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const buatAduan = useCallback<AppDataContextValue['buatAduan']>((input) => {
+    const newId = input.id ?? uid('AD');
+    const { id: _ignored, ...rest } = input;
     setData((prev) => ({
       ...prev,
       aduan: [
         {
-          id: uid('AD'),
-          ...input,
+          id: newId,
+          ...rest,
           status: 'Baru',
           tanggapan: null,
           tanggal: new Date().toLocaleDateString('id-ID', {
@@ -683,6 +716,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...prev.aduan,
       ],
     }));
+    return newId;
   }, []);
 
   const siklusStatusAduan = useCallback<AppDataContextValue['siklusStatusAduan']>((aduanId) => {
@@ -720,8 +754,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   // ---- Master Data CRUD ----
   const addSiswa = useCallback<AppDataContextValue['addSiswa']>((input) => {
-    const id = uid('S');
-    setData((prev) => ({ ...prev, siswa: [...prev.siswa, { id, ...input }] }));
+    const { id: customId, ...rest } = input as Omit<Siswa, 'id'> & { id?: string };
+    const id = customId ?? uid('S');
+    setData((prev) => ({ ...prev, siswa: [...prev.siswa, { id, ...rest }] }));
     return id;
   }, []);
 
@@ -746,14 +781,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addGuru = useCallback<AppDataContextValue['addGuru']>((input) => {
-    const id = uid('G');
+    const { id: customId, ...rest } = input as Omit<Guru, 'id'> & { id?: string };
+    const id = customId ?? uid('G');
     setData((prev) => ({
       ...prev,
       guru: [
         ...prev.guru.map((g) =>
-          input.waliKelasId && g.waliKelasId === input.waliKelasId ? { ...g, waliKelasId: null } : g,
+          rest.waliKelasId && g.waliKelasId === rest.waliKelasId ? { ...g, waliKelasId: null } : g,
         ),
-        { id, ...input },
+        { id, ...rest },
       ],
     }));
     return id;
@@ -783,8 +819,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addKelas = useCallback<AppDataContextValue['addKelas']>((input) => {
-    const id = uid('K');
-    setData((prev) => ({ ...prev, kelas: [...prev.kelas, { id, ...input }] }));
+    const { id: customId, ...rest } = input as Omit<Kelas, 'id'> & { id?: string };
+    const id = customId ?? uid('K');
+    setData((prev) => ({ ...prev, kelas: [...prev.kelas, { id, ...rest }] }));
     return id;
   }, []);
 
@@ -799,6 +836,78 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setData((prev) => ({
       ...prev,
       kelas: prev.kelas.filter((k) => k.id !== id),
+    }));
+  }, []);
+
+  const upsertSiswa = useCallback<AppDataContextValue['upsertSiswa']>((row) => {
+    setData((prev) => ({
+      ...prev,
+      siswa: prev.siswa.some((s) => s.id === row.id)
+        ? prev.siswa.map((s) => (s.id === row.id ? row : s))
+        : [...prev.siswa, row],
+    }));
+  }, []);
+
+  const upsertGuru = useCallback<AppDataContextValue['upsertGuru']>((row) => {
+    setData((prev) => ({
+      ...prev,
+      guru: prev.guru.some((g) => g.id === row.id)
+        ? prev.guru.map((g) => (g.id === row.id ? row : g))
+        : [...prev.guru, row],
+    }));
+  }, []);
+
+  const upsertKelas = useCallback<AppDataContextValue['upsertKelas']>((row) => {
+    setData((prev) => ({
+      ...prev,
+      kelas: prev.kelas.some((k) => k.id === row.id)
+        ? prev.kelas.map((k) => (k.id === row.id ? row : k))
+        : [...prev.kelas, row],
+    }));
+  }, []);
+
+  const adopsiIdSiswa = useCallback<AppDataContextValue['adopsiIdSiswa']>((idLama, row) => {
+    if (idLama === row.id) {
+      setData((prev) => ({ ...prev, siswa: prev.siswa.map((s) => (s.id === idLama ? row : s)) }));
+      return;
+    }
+    setData((prev) => ({
+      ...prev,
+      siswa: [...prev.siswa.filter((s) => s.id !== idLama && s.id !== row.id), row],
+      presensi: prev.presensi.map((p) => (p.siswaId === idLama ? { ...p, siswaId: row.id } : p)),
+      izin: prev.izin.map((i) => (i.siswaId === idLama ? { ...i, siswaId: row.id } : i)),
+      peminjaman: prev.peminjaman.map((p) => (p.siswaId === idLama ? { ...p, siswaId: row.id } : p)),
+      submisi: prev.submisi.map((s) => (s.siswaId === idLama ? { ...s, siswaId: row.id } : s)),
+      aduan: prev.aduan.map((a) => (a.siswaId === idLama ? { ...a, siswaId: row.id } : a)),
+    }));
+  }, []);
+
+  const adopsiIdGuru = useCallback<AppDataContextValue['adopsiIdGuru']>((idLama, row) => {
+    if (idLama === row.id) {
+      setData((prev) => ({ ...prev, guru: prev.guru.map((g) => (g.id === idLama ? row : g)) }));
+      return;
+    }
+    setData((prev) => ({
+      ...prev,
+      guru: [...prev.guru.filter((g) => g.id !== idLama && g.id !== row.id), row],
+      kelas: prev.kelas.map((k) => (k.waliKelasId === idLama ? { ...k, waliKelasId: row.id } : k)),
+      tugas: prev.tugas.map((t) => (t.guruId === idLama ? { ...t, guruId: row.id } : t)),
+      riwayatGuru: prev.riwayatGuru.map((r) => (r.guruId === idLama ? { ...r, guruId: row.id } : r)),
+    }));
+  }, []);
+
+  const adopsiIdKelas = useCallback<AppDataContextValue['adopsiIdKelas']>((idLama, row) => {
+    if (idLama === row.id) {
+      setData((prev) => ({ ...prev, kelas: prev.kelas.map((k) => (k.id === idLama ? row : k)) }));
+      return;
+    }
+    setData((prev) => ({
+      ...prev,
+      kelas: [...prev.kelas.filter((k) => k.id !== idLama && k.id !== row.id), row],
+      siswa: prev.siswa.map((s) => (s.kelasId === idLama ? { ...s, kelasId: row.id } : s)),
+      guru: prev.guru.map((g) => (g.waliKelasId === idLama ? { ...g, waliKelasId: row.id } : g)),
+      tugas: prev.tugas.map((t) => (t.kelasId === idLama ? { ...t, kelasId: row.id } : t)),
+      izin: prev.izin.map((i) => (i.kelasId === idLama ? { ...i, kelasId: row.id } : i)),
     }));
   }, []);
 
@@ -936,6 +1045,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addKelas,
       updateKelas,
       deleteKelas,
+      upsertSiswa,
+      upsertGuru,
+      upsertKelas,
+      adopsiIdSiswa,
+      adopsiIdGuru,
+      adopsiIdKelas,
       bulkImportSiswa,
       bulkImportGuru,
       getSiswa,
@@ -948,7 +1063,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       tambahFasilitas, updateKondisiFasilitas, buatTugas, submitTugas, nilaiSubmisi,
       buatAduan, siklusStatusAduan, tanggapiAduan, tambahRiwayatGuru, updatePengaturan,
       resetData, addSiswa, updateSiswa, deleteSiswa, addGuru, updateGuru, deleteGuru,
-      addKelas, updateKelas, deleteKelas, bulkImportSiswa, bulkImportGuru,
+      addKelas, updateKelas, deleteKelas, upsertSiswa, upsertGuru, upsertKelas,
+      adopsiIdSiswa, adopsiIdGuru, adopsiIdKelas, bulkImportSiswa, bulkImportGuru,
       getSiswa, getGuru, getKelas, getFasilitas,
     ],
   );

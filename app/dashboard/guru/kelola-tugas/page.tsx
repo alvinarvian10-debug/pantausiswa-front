@@ -16,6 +16,9 @@ export default function KelolaTugasPage() {
   const [gradeTarget, setGradeTarget] = useState<SubmisiTugas | null>(null);
   const [nilai, setNilai] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [dbNotice, setDbNotice] = useState('');
+  const [dbError, setDbError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const me = guru.find((g) => g.id === CURRENT_GURU_ID);
   const myKelas = useMemo(() => kelas.filter((k) => k.waliKelasId === CURRENT_GURU_ID), [kelas]);
@@ -35,10 +38,13 @@ export default function KelolaTugasPage() {
     lampiranLink: '',
   });
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeKelas || !form.judul.trim() || !form.deskripsi.trim()) return;
-    buatTugas({
+    if (!activeKelas || !form.judul.trim() || !form.deskripsi.trim() || saving) return;
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
+    const payload = {
       guruId: CURRENT_GURU_ID,
       kelasId: activeKelas.id,
       mapel: form.mapel,
@@ -47,9 +53,33 @@ export default function KelolaTugasPage() {
       lampiranNama: form.lampiranNama,
       lampiranLink: form.lampiranLink.trim() || null,
       deadline: form.deadline,
-    });
+    };
+    // Simpan ke MySQL dulu — pakai id DB sebagai id lokal agar link submisi cocok.
+    let dbId: string | undefined;
+    try {
+      const res = await fetch('/api/tugas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+      const saved = await res.json().catch(() => null);
+      if (saved?.id) dbId = String(saved.id);
+      setDbNotice('Tugas tersimpan di database XAMPP.');
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Tersimpan lokal, tapi gagal masuk database: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk database.',
+      );
+    }
+    buatTugas(dbId ? { ...payload, id: dbId } : payload);
     tambahRiwayatGuru(CURRENT_GURU_ID, 'Membuat tugas', `Membuat tugas baru "${form.judul.trim()}" untuk kelas ${activeKelas.nama}`);
     setForm({ mapel: me?.mapel[0] ?? '', judul: '', deskripsi: '', deadline: new Date().toISOString().slice(0, 10), lampiranNama: null, lampiranLink: '' });
+    setSaving(false);
   };
 
   const kelasSiswaIds = useMemo(
@@ -65,16 +95,63 @@ export default function KelolaTugasPage() {
     }));
   }, [kelasTugas, submisi, kelasSiswaIds]);
 
-  const handleGrade = (e: React.FormEvent) => {
+  const handleGrade = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!gradeTarget || nilai === '') return;
+    if (!gradeTarget || nilai === '' || saving) return;
+    const target = gradeTarget;
     const n = Math.max(0, Math.min(100, Number(nilai)));
-    nilaiSubmisi(gradeTarget.id, n, feedback.trim());
-    const s = getSiswa(gradeTarget.siswaId);
+    const fb = feedback.trim();
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
+    nilaiSubmisi(target.id, n, fb);
+    const s = getSiswa(target.siswaId);
     tambahRiwayatGuru(CURRENT_GURU_ID, 'Menilai tugas', `Memberi nilai ${n} untuk tugas milik ${s?.nama ?? '-'}`);
-    setGradeTarget(null);
-    setNilai('');
-    setFeedback('');
+    // Sinkron nilai ke MySQL; data lama (id SB-xx) dicocokkan via tugas+siswa.
+    try {
+      const resPatch = await fetch(`/api/submisi/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nilai: n, feedback: fb }),
+      });
+      if (!resPatch.ok) {
+        const errBody = await resPatch.json().catch(() => null);
+        if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
+          const listRes = await fetch('/api/submisi');
+          const list = listRes.ok ? await listRes.json().catch(() => null) : null;
+          const match = Array.isArray(list)
+            ? list.find(
+                (r: { id?: string; tugasId?: string; siswaId?: string }) =>
+                  r.tugasId === target.tugasId && r.siswaId === target.siswaId,
+              )
+            : null;
+          if (match?.id) {
+            const resRetry = await fetch(`/api/submisi/${match.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nilai: n, feedback: fb }),
+            });
+            if (!resRetry.ok) throw new Error('Gagal update baris DB yang cocok.');
+          } else {
+            throw new Error('Pengumpulan ini belum ada di database. Minta siswa kumpulkan ulang.');
+          }
+        } else {
+          throw new Error(errBody?.error ?? 'Gagal update database.');
+        }
+      }
+      setDbNotice(`Nilai ${n} tersimpan di database XAMPP.`);
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Nilai lokal tersimpan, tapi gagal masuk database: ${err.message}`
+          : 'Nilai lokal tersimpan, tapi gagal masuk database.',
+      );
+    } finally {
+      setSaving(false);
+      setGradeTarget(null);
+      setNilai('');
+      setFeedback('');
+    }
   };
 
   return (
@@ -106,6 +183,19 @@ export default function KelolaTugasPage() {
           ))}
         </div>
       </ScrollReveal>
+
+      {dbNotice && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
+          {dbNotice}
+        </div>
+      )}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
+      )}
 
       {activeKelas && (
         <>
@@ -205,10 +295,11 @@ export default function KelolaTugasPage() {
 
                   <button
                     type="submit"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97] sm:w-auto"
+                    disabled={saving}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-emerald-500/70 sm:w-auto"
                   >
                     <span className="material-symbols-outlined icon-fill text-[18px]">send</span>
-                    Berikan Tugas
+                    {saving ? 'Menyimpan...' : 'Berikan Tugas'}
                   </button>
                 </form>
               </GlassCard>
@@ -337,9 +428,10 @@ export default function KelolaTugasPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
                 >
-                  Simpan Nilai
+                  {saving ? 'Menyimpan...' : 'Simpan Nilai'}
                 </button>
               </div>
             </form>

@@ -25,6 +25,78 @@ export default function PersetujuanIzinPage() {
   const [rejectTarget, setRejectTarget] = useState<IzinRequest | null>(null);
   const [alasanTolak, setAlasanTolak] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [dbNotice, setDbNotice] = useState('');
+  const [dbError, setDbError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // PATCH ke DB; kalau id lokal lama tidak ada di DB (404), cari baris yang
+  // cocok (siswa+tanggal+jenis) lalu PATCH itu; kalau tidak ketemu, POST baru.
+  const syncKeDB = async (
+    req: IzinRequest,
+    patch: { keputusan: 'Disetujui' | 'Ditolak'; alasanTolak?: string },
+  ) => {
+    const resPatch = await fetch(`/api/izin/${req.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (resPatch.ok) return;
+    const errBody = await resPatch.json().catch(() => null);
+    if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
+      try {
+        const listRes = await fetch('/api/izin');
+        if (listRes.ok) {
+          const list = await listRes.json();
+          const match = Array.isArray(list)
+            ? list.find(
+                (r: { id?: string; siswaId?: string; tanggalMulai?: string; jenis?: string }) =>
+                  r.siswaId === req.siswaId &&
+                  r.tanggalMulai === req.tanggalMulai &&
+                  r.jenis === req.jenis,
+              )
+            : null;
+          if (match?.id) {
+            const resRetry = await fetch(`/api/izin/${match.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(patch),
+            });
+            if (resRetry.ok) return;
+          }
+        }
+      } catch {
+        // lanjut ke POST di bawah
+      }
+      const resPost = await fetch('/api/izin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siswaId: req.siswaId,
+          kelasId: req.kelasId,
+          jenis: req.jenis,
+          tanggalMulai: req.tanggalMulai,
+          tanggalSelesai: req.tanggalSelesai,
+          alasan: req.alasan,
+          lampiranNama: req.lampiranNama,
+        }),
+      });
+      if (!resPost.ok) {
+        const postErr = await resPost.json().catch(() => null);
+        throw new Error(postErr?.error ?? 'Gagal membuat baris DB.');
+      }
+      const saved = await resPost.json().catch(() => null);
+      if (saved?.id) {
+        const resPatch2 = await fetch(`/api/izin/${saved.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+        if (!resPatch2.ok) throw new Error('Gagal update baris DB yang baru dibuat.');
+      }
+      return;
+    }
+    throw new Error(errBody?.error ?? 'Gagal update database.');
+  };
 
   const myKelas = useMemo(() => kelas.filter((k) => k.waliKelasId === CURRENT_GURU_ID), [kelas]);
   const activeKelas = myKelas.find((k) => k.id === activeKelasId) ?? myKelas[0] ?? null;
@@ -40,18 +112,51 @@ export default function PersetujuanIzinPage() {
     [izin, activeKelas],
   );
 
-  const handleApprove = (req: IzinRequest) => {
+  const handleApprove = async (req: IzinRequest) => {
+    if (saving) return;
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
     prosesIzin(req.id, 'Disetujui');
     tambahRiwayatGuru(CURRENT_GURU_ID, 'Menyetujui izin', `Menyetujui pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama ?? '-'}`);
+    try {
+      await syncKeDB(req, { keputusan: 'Disetujui' });
+      setDbNotice('Persetujuan tersimpan di database XAMPP (termasuk catatan presensi).');
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Lokal berubah, tapi gagal masuk database: ${err.message}`
+          : 'Lokal berubah, tapi gagal masuk database.',
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleReject = (e: React.FormEvent) => {
+  const handleReject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rejectTarget || !alasanTolak.trim()) return;
-    prosesIzin(rejectTarget.id, 'Ditolak', alasanTolak.trim());
-    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${rejectTarget.jenis.toLowerCase()} atas nama ${getSiswa(rejectTarget.siswaId)?.nama ?? '-'} — ${alasanTolak.trim()}`);
-    setRejectTarget(null);
-    setAlasanTolak('');
+    if (!rejectTarget || !alasanTolak.trim() || saving) return;
+    const target = rejectTarget;
+    const teks = alasanTolak.trim();
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
+    prosesIzin(target.id, 'Ditolak', teks);
+    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${target.jenis.toLowerCase()} atas nama ${getSiswa(target.siswaId)?.nama ?? '-'} — ${teks}`);
+    try {
+      await syncKeDB(target, { keputusan: 'Ditolak', alasanTolak: teks });
+      setDbNotice('Penolakan tersimpan di database XAMPP.');
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Lokal berubah, tapi gagal masuk database: ${err.message}`
+          : 'Lokal berubah, tapi gagal masuk database.',
+      );
+    } finally {
+      setSaving(false);
+      setRejectTarget(null);
+      setAlasanTolak('');
+    }
   };
 
   return (
@@ -102,6 +207,19 @@ export default function PersetujuanIzinPage() {
           </label>
         </div>
       </ScrollReveal>
+
+      {dbNotice && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
+          {dbNotice}
+        </div>
+      )}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
+      )}
 
       {activeKelas && (
         <StaggerGroup key={`${activeKelas.id}-${showAll}`} as="div" className="flex flex-col gap-4">

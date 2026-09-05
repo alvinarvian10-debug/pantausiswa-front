@@ -32,6 +32,7 @@ export default function PresensiPage() {
     alasan: '',
     lampiranNama: null as string | null,
   });
+  const [dbError, setDbError] = useState('');
 
   const me = getSiswa(CURRENT_SISWA_ID);
   const today = new Date().toISOString().slice(0, 10);
@@ -70,32 +71,82 @@ export default function PresensiPage() {
     );
   }, [myPresensi, query]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting || !form.alasan.trim() || !me) return;
     setSubmitting(true);
-    setTimeout(() => {
-      ajukanIzin({
-        siswaId: me.id,
-        kelasId: me.kelasId,
-        jenis: form.jenis,
-        tanggalMulai: form.tanggalMulai,
-        tanggalSelesai: form.tanggalSelesai,
-        alasan: form.alasan.trim(),
-        lampiranNama: form.lampiranNama,
+    setDbError('');
+    const payload = {
+      siswaId: me.id,
+      kelasId: me.kelasId,
+      jenis: form.jenis,
+      tanggalMulai: form.tanggalMulai,
+      tanggalSelesai: form.tanggalSelesai,
+      alasan: form.alasan.trim(),
+      lampiranNama: form.lampiranNama,
+    };
+    // 1) Simpan ke MySQL via API — pakai id DB sebagai id lokal agar PATCH guru cocok.
+    let dbId: string | undefined;
+    try {
+      const res = await fetch('/api/izin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-      setSubmitting(false);
-      setOpenForm(false);
-      setSuccess(true);
-      setForm({
-        jenis: 'Izin',
-        tanggalMulai: today,
-        tanggalSelesai: today,
-        alasan: '',
-        lampiranNama: null,
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+      const saved = await res.json().catch(() => null);
+      if (saved?.id) dbId = String(saved.id);
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Tersimpan lokal, tapi gagal masuk database XAMPP: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk database XAMPP.',
+      );
+    }
+    // 2) Simpan lokal agar UI langsung update.
+    ajukanIzin(dbId ? { ...payload, id: dbId } : payload);
+    setSubmitting(false);
+    setOpenForm(false);
+    setSuccess(true);
+    setForm({
+      jenis: 'Izin',
+      tanggalMulai: today,
+      tanggalSelesai: today,
+      alasan: '',
+      lampiranNama: null,
+    });
+    setTimeout(() => setSuccess(false), 4000);
+  };
+
+  const handleCheckIn = async () => {
+    setDbError('');
+    try {
+      const res = await fetch('/api/presensi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siswaId: CURRENT_SISWA_ID,
+          tanggal: today,
+          waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          status: 'Hadir',
+          keterangan: 'Presensi via check-in mandiri',
+        }),
       });
-      setTimeout(() => setSuccess(false), 4000);
-    }, 700);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Check-in lokal tercatat, tapi gagal masuk database: ${err.message}`
+          : 'Check-in lokal tercatat, tapi gagal masuk database.',
+      );
+    }
+    checkIn(CURRENT_SISWA_ID);
   };
 
   return (
@@ -146,7 +197,7 @@ export default function PresensiPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => checkIn(CURRENT_SISWA_ID)}
+                onClick={() => handleCheckIn()}
                 className="mt-6 w-full rounded-xl bg-emerald-600 py-3 font-medium text-white transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97]"
               >
                 Check-in Sekarang
@@ -174,6 +225,13 @@ export default function PresensiPage() {
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
           <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
           Pengajuan berhasil dikirim dan menunggu persetujuan wali kelas.
+        </div>
+      )}
+
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
         </div>
       )}
 

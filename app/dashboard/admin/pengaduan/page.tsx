@@ -19,6 +19,75 @@ export default function LaporanAduanPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('Semua');
   const [responTarget, setResponTarget] = useState<Aduan | null>(null);
   const [tanggapan, setTanggapan] = useState('');
+  const [dbNotice, setDbNotice] = useState('');
+  const [dbError, setDbError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // PATCH ke DB; kalau id lokal lama tidak ada di DB (404), buatkan barisnya via POST.
+  const syncKeDB = async (a: Aduan, patch: { status?: string; tanggapan?: string }) => {
+    const resPatch = await fetch(`/api/complaints/${a.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (resPatch.ok) return;
+    const errBody = await resPatch.json().catch(() => null);
+    if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
+      // Data lama (id lokal AD-xx) belum ada di DB. Cari baris yang cocok
+      // berdasarkan judul+deskripsi dulu agar tidak jadi duplikat.
+      try {
+        const listRes = await fetch('/api/complaints');
+        if (listRes.ok) {
+          const list = await listRes.json();
+          const match = Array.isArray(list)
+            ? list.find(
+                (r: { title?: string; description?: string }) =>
+                  r.title === a.judul && r.description === a.deskripsi,
+              )
+            : null;
+          if (match?.id) {
+            const resRetry = await fetch(`/api/complaints/${match.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(patch),
+            });
+            if (resRetry.ok) return;
+          }
+        }
+      } catch {
+        // lanjut ke POST di bawah
+      }
+      const resPost = await fetch('/api/complaints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          judul: a.judul,
+          deskripsi: a.deskripsi,
+          jenis: a.jenis,
+          siswaId: a.siswaId,
+          fasilitasId: a.fasilitasId,
+          lampiranNama: a.lampiranNama,
+          isAnonim: a.isAnonim,
+        }),
+      });
+      if (!resPost.ok) {
+        const postErr = await resPost.json().catch(() => null);
+        throw new Error(postErr?.error ?? 'Gagal membuat baris DB.');
+      }
+      const saved = await resPost.json().catch(() => null);
+      // Setelah baris dibuat (id baru), terapkan patch-nya.
+      if (saved?.id) {
+        const resPatch2 = await fetch(`/api/complaints/${saved.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+        if (!resPatch2.ok) throw new Error('Gagal update baris DB yang baru dibuat.');
+      }
+      return;
+    }
+    throw new Error(errBody?.error ?? 'Gagal update database.');
+  };
 
   const visible = useMemo(() => {
     if (filter === 'Semua') return aduan;
@@ -36,12 +105,47 @@ export default function LaporanAduanPage() {
     ];
   }, [aduan]);
 
-  const handleRespon = (e: React.FormEvent) => {
+  const handleRespon = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!responTarget || !tanggapan.trim()) return;
-    tanggapiAduan(responTarget.id, tanggapan.trim());
-    setResponTarget(null);
-    setTanggapan('');
+    if (!responTarget || !tanggapan.trim() || saving) return;
+    const target = responTarget;
+    const teks = tanggapan.trim();
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
+    tanggapiAduan(target.id, teks);
+    try {
+      await syncKeDB(target, { tanggapan: teks });
+      setDbNotice('Tanggapan tersimpan di database XAMPP.');
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Tersimpan lokal, tapi gagal masuk database: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk database.',
+      );
+    } finally {
+      setSaving(false);
+      setResponTarget(null);
+      setTanggapan('');
+    }
+  };
+
+  const handleStatusMaju = async (a: Aduan) => {
+    if (saving) return;
+    const next = a.status === 'Baru' ? 'Proses' : a.status === 'Proses' ? 'Selesai' : 'Selesai';
+    siklusStatusAduan(a.id);
+    setDbError('');
+    setDbNotice('');
+    try {
+      await syncKeDB(a, { status: next });
+      setDbNotice(`Status "${a.judul}" → ${next}, tersimpan di database.`);
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Status lokal berubah, tapi gagal masuk database: ${err.message}`
+          : 'Status lokal berubah, tapi gagal masuk database.',
+      );
+    }
   };
 
   return (
@@ -69,6 +173,19 @@ export default function LaporanAduanPage() {
           </GlassCard>
         ))}
       </StaggerGroup>
+
+      {dbNotice && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
+          {dbNotice}
+        </div>
+      )}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => (
@@ -100,7 +217,7 @@ export default function LaporanAduanPage() {
                 <span className="text-xs text-gray-400">Oleh {pelapor} · {a.tanggal}</span>
                 <button
                   type="button"
-                  onClick={() => siklusStatusAduan(a.id)}
+                  onClick={() => handleStatusMaju(a)}
                   disabled={a.status === 'Selesai'}
                   title={a.status === 'Selesai' ? 'Sudah selesai' : 'Klik untuk memajukan status'}
                   className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition-transform active:scale-95 ${STATUS_STYLE[a.status]} ${a.status !== 'Selesai' ? 'cursor-pointer hover:brightness-95' : 'cursor-default'}`}
@@ -166,9 +283,10 @@ export default function LaporanAduanPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
                 >
-                  Kirim Tanggapan
+                  {saving ? 'Menyimpan...' : 'Kirim Tanggapan'}
                 </button>
               </div>
             </form>

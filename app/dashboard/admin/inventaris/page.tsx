@@ -20,6 +20,53 @@ export default function InventarisPage() {
   const [form, setForm] = useState({
     nama: '', kategori: 'Elektronik' as KategoriFasilitas, icon: 'inventory_2', jumlahTotal: 1,
   });
+  const [dbNotice, setDbNotice] = useState('');
+  const [dbError, setDbError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // PATCH kondisi ke DB; id lokal lama (F-xx) dicocokkan via nama bila 404.
+  const syncKondisiKeDB = async (fasilitasId: string, nama: string, kondisi: KondisiFasilitas) => {
+    const resPatch = await fetch(`/api/fasilitas/${fasilitasId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kondisi }),
+    });
+    if (resPatch.ok) return;
+    const errBody = await resPatch.json().catch(() => null);
+    if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
+      const listRes = await fetch('/api/fasilitas');
+      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
+      const match = Array.isArray(list)
+        ? list.find((r: { id?: string; nama?: string }) => r.nama === nama)
+        : null;
+      if (match?.id) {
+        const resRetry = await fetch(`/api/fasilitas/${match.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kondisi }),
+        });
+        if (resRetry.ok) return;
+      }
+      throw new Error('Fasilitas ini belum ada di database. Tambahkan ulang via form.');
+    }
+    throw new Error(errBody?.error ?? 'Gagal update database.');
+  };
+
+  const handleKondisi = async (fasilitasId: string, nama: string, kondisi: KondisiFasilitas) => {
+    updateKondisiFasilitas(fasilitasId, kondisi);
+    setDbError('');
+    setDbNotice('');
+    try {
+      await syncKondisiKeDB(fasilitasId, nama, kondisi);
+      setDbNotice(`Kondisi "${nama}" → ${kondisi}, tersimpan di database.`);
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Lokal berubah, tapi gagal masuk database: ${err.message}`
+          : 'Lokal berubah, tapi gagal masuk database.',
+      );
+    }
+  };
 
   const stats = useMemo(() => {
     const total = fasilitas.reduce((sum, f) => sum + f.jumlahTotal, 0);
@@ -36,19 +83,44 @@ export default function InventarisPage() {
 
   const activeLoans = useMemo(() => peminjaman.filter((p) => p.status === 'Dipinjam'), [peminjaman]);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nama.trim() || form.jumlahTotal < 1) return;
-    tambahFasilitas({
+    if (!form.nama.trim() || form.jumlahTotal < 1 || saving) return;
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
+    const payload = {
       nama: form.nama.trim(),
       kategori: form.kategori,
       icon: form.icon,
       jumlahTotal: form.jumlahTotal,
       jumlahTersedia: form.jumlahTotal,
-      kondisi: 'Baik',
-    });
-    setForm({ nama: '', kategori: 'Elektronik', icon: 'inventory_2', jumlahTotal: 1 });
-    setOpenForm(false);
+      kondisi: 'Baik' as KondisiFasilitas,
+    };
+    try {
+      const res = await fetch('/api/fasilitas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+      const saved = await res.json().catch(() => null);
+      tambahFasilitas({ ...payload, ...(saved?.id ? { id: String(saved.id) } : {}) });
+      setDbNotice(`Fasilitas "${payload.nama}" tersimpan di database XAMPP.`);
+      setForm({ nama: '', kategori: 'Elektronik', icon: 'inventory_2', jumlahTotal: 1 });
+      setOpenForm(false);
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Gagal masuk database: ${err.message}`
+          : 'Gagal masuk database.',
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -135,12 +207,26 @@ export default function InventarisPage() {
             </div>
             <button
               type="submit"
-              className="sm:col-span-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              disabled={saving}
+              className="sm:col-span-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
             >
-              Simpan Fasilitas
+              {saving ? 'Menyimpan...' : 'Simpan Fasilitas'}
             </button>
           </form>
         </GlassCard>
+      )}
+
+      {dbNotice && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
+          {dbNotice}
+        </div>
+      )}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
       )}
 
       {activeLoans.length > 0 && (
@@ -198,7 +284,7 @@ export default function InventarisPage() {
                   <td className="px-6 py-4">
                     <select
                       value={f.kondisi}
-                      onChange={(e) => updateKondisiFasilitas(f.id, e.target.value as KondisiFasilitas)}
+                      onChange={(e) => handleKondisi(f.id, f.nama, e.target.value as KondisiFasilitas)}
                       className="rounded-lg border border-slate-100 bg-white px-3 py-1.5 text-xs text-gray-600 outline-none focus:border-emerald-300"
                     >
                       <option value="Baik">Baik</option>

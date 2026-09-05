@@ -29,11 +29,35 @@ export default function SecretaryDashboard() {
   const [selectedStatus, setSelectedStatus] = useState<StatusPresensi>('Hadir');
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState('');
+  const [dbError, setDbError] = useState('');
 
   const filtered = members.filter((s) => `${s.nama} ${s.nis}`.toLowerCase().includes(query.trim().toLowerCase()));
   const statusFor = (id: string) => presensi.find((p) => p.siswaId === id && p.tanggal === today);
 
-  const setAttendance = (siswaId: string, status: StatusPresensi) => {
+  const setAttendance = async (siswaId: string, status: StatusPresensi) => {
+    setDbError('');
+    try {
+      const res = await fetch('/api/presensi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siswaId,
+          tanggal: today,
+          status,
+          keterangan: `Dicatat oleh sekretaris ${myKelas?.nama ?? ''}`,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Tersimpan lokal, tapi gagal masuk database: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk database.',
+      );
+    }
     catatPresensi(secretaryId, { siswaId, status, keterangan: `Dicatat oleh sekretaris ${myKelas?.nama ?? ''}` });
     setMessage('Presensi berhasil diperbarui.');
     setTimeout(() => setMessage(''), 2000);
@@ -54,6 +78,7 @@ export default function SecretaryDashboard() {
       </ScrollReveal>
 
       {message && <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">{message}</div>}
+      {dbError && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">{dbError}</div>}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {STATUS.map((status) => (

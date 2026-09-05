@@ -9,6 +9,31 @@ export default function PengaturanPage() {
   const { pengaturan, updatePengaturan, permintaanPassword, sekretaris, getKelas, prosesGantiPassword } = useAppData();
   const [form, setForm] = useState(pengaturan);
   const [saved, setSaved] = useState(false);
+  const [pwNotice, setPwNotice] = useState('');
+
+  // Setujui = update lokal + update hash password di database (sumber login).
+  const handleSetujuPassword = async (requestId: string, sekretarisId: string, passwordBaru: string, username: string) => {
+    prosesGantiPassword(requestId, 'Disetujui');
+    setPwNotice('');
+    try {
+      const res = await fetch('/api/auth/admin-set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, newPassword: passwordBaru }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal update database.');
+      }
+      setPwNotice(`Password "${username}" berlaku baru di database.`);
+    } catch (err) {
+      setPwNotice(
+        err instanceof Error
+          ? `Lokal disetujui, tapi password DB gagal diubah: ${err.message}`
+          : 'Lokal disetujui, tapi password DB gagal diubah.',
+      );
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +68,9 @@ export default function PengaturanPage() {
               Persetujuan Ganti Password Sekretaris
             </h2>
             <p className="mb-5 text-sm text-gray-500">Konfirmasi perubahan password akun sekretaris kelas sebelum password baru berlaku.</p>
+            {pwNotice && (
+              <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">{pwNotice}</p>
+            )}
             <div className="flex flex-col gap-3">
               {permintaanPassword.filter((r) => r.status === 'Menunggu').map((request) => {
                 const account = sekretaris.find((a) => a.id === request.sekretarisId);
@@ -55,7 +83,7 @@ export default function PengaturanPage() {
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => prosesGantiPassword(request.id, 'Ditolak')} className="rounded-lg border border-red-100 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">Tolak</button>
-                      <button type="button" onClick={() => prosesGantiPassword(request.id, 'Disetujui')} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Setujui</button>
+                      <button type="button" onClick={() => handleSetujuPassword(request.id, request.sekretarisId, request.passwordBaru, account?.username ?? '')} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Setujui</button>
                     </div>
                   </div>
                 );

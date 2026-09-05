@@ -240,7 +240,12 @@ export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
 
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+              } catch {
+                // abaikan — sesi lokal tetap dibersihkan
+              }
               clearSession();
               onClose();
               router.push('/login');

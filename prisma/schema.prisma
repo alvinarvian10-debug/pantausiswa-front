@@ -20,7 +20,118 @@ model Complaint {
   category      String
   description   String   @db.Text
   isAnonymous   Boolean  @default(false)
-  status        String   @default("Diproses")
+  status        String   @default("Baru")
   adminResponse String?  @db.Text
   createdAt     DateTime @default(now())
+  // Field tambahan agar cocok dengan form Aduan di frontend
+  siswaId       String?
+  fasilitasId   String?
+  lampiranNama  String?
+}
+
+model LeaveRequest {
+  id            String    @id @default(cuid())
+  siswaId       String?
+  kelasId       String?
+  jenis         String    @default("Izin")
+  tanggalMulai  String
+  tanggalSelesai String
+  alasan        String    @db.Text
+  lampiranNama  String?
+  status        String    @default("Menunggu")
+  alasanTolak   String?   @db.Text
+  diajukanPada  DateTime  @default(now())
+  diprosesPada  DateTime?
+}
+
+model Attendance {
+  id         String   @id @default(cuid())
+  siswaId    String
+  tanggal    String
+  waktu      String   @default("-")
+  status     String   @default("Hadir")
+  keterangan String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@unique([siswaId, tanggal])
+}
+
+model Assignment {
+  id           String   @id @default(cuid())
+  guruId       String?
+  kelasId      String?
+  mapel        String   @default("Umum")
+  judul        String
+  deskripsi    String   @db.Text
+  lampiranNama String?
+  lampiranLink String?
+  deadline     String
+  dibuatPada   DateTime @default(now())
+}
+
+model Submission {
+  id              String   @id @default(cuid())
+  tugasId         String
+  siswaId         String
+  tipe            String   @default("File")
+  konten          String   @db.Text
+  dikumpulkanPada DateTime @default(now())
+  status          String   @default("Menunggu Nilai")
+  nilai           Int?
+  feedback        String?  @db.Text
+
+  @@unique([tugasId, siswaId])
+}
+
+model Facility {
+  id             String @id @default(cuid())
+  nama           String
+  kategori       String @default("Elektronik")
+  icon           String @default("inventory_2")
+  jumlahTotal    Int    @default(1)
+  jumlahTersedia Int    @default(1)
+  kondisi        String @default("Baik")
+}
+
+model Loan {
+  id            String   @id @default(cuid())
+  siswaId       String?
+  fasilitasId   String?
+  keperluan     String   @db.Text
+  tanggalPinjam String
+  batasKembali  String
+  status        String   @default("Dipinjam")
+  createdAt     DateTime @default(now())
+}
+
+model SchoolClass {
+  id          String @id @default(cuid())
+  nama        String @unique
+  waliKelasId String?
+}
+
+model Student {
+  id      String  @id @default(cuid())
+  nama    String
+  nis     String  @unique
+  kelasId String?
+  tone    String  @default("emerald")
+}
+
+model Teacher {
+  id          String @id @default(cuid())
+  nama        String
+  mapel       String @default("")
+  waliKelasId String?
+  tone        String @default("emerald")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  passwordHash String
+  role        String
+  displayName String?
+  secretaryId String?
+  createdAt   DateTime @default(now())
 }

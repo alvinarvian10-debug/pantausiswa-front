@@ -27,6 +27,9 @@ export default function PeminjamanPage() {
   const [pickedFasilitas, setPickedFasilitas] = useState<Fasilitas | null>(null);
   const [keperluan, setKeperluan] = useState('');
   const [jamKembali, setJamKembali] = useState('16:00');
+  const [dbNotice, setDbNotice] = useState('');
+  const [dbError, setDbError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const myLoans = useMemo(
     () => peminjaman.filter((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam'),
@@ -42,18 +45,81 @@ export default function PeminjamanPage() {
     });
   }, [fasilitas, query, category]);
 
-  const handleAjukan = (e: React.FormEvent) => {
+  const handleAjukan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pickedFasilitas || !keperluan.trim()) return;
+    if (!pickedFasilitas || !keperluan.trim() || saving) return;
+    const fasilitasDipilih = pickedFasilitas;
     const today = new Date().toISOString().slice(0, 10);
-    ajukanPeminjaman({
+    const payload = {
       siswaId: CURRENT_SISWA_ID,
-      fasilitasId: pickedFasilitas.id,
+      fasilitasId: fasilitasDipilih.id,
       keperluan: keperluan.trim(),
       batasKembali: `${today}T${jamKembali}:00`,
-    });
-    setPickedFasilitas(null);
-    setKeperluan('');
+    };
+    setSaving(true);
+    setDbError('');
+    setDbNotice('');
+    // Stok adalah kebenaran DB: POST dulu (transaksi atomik di server).
+    // Gagal (stok habis/rusak) → jangan buat lokal agar angka tidak ngaco.
+    try {
+      const res = await fetch('/api/peminjaman', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          fasilitasNama: fasilitasDipilih.nama,
+          kategori: fasilitasDipilih.kategori,
+          icon: fasilitasDipilih.icon,
+          jumlahTotal: fasilitasDipilih.jumlahTotal,
+          tanggalPinjam: today,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+      const saved = await res.json().catch(() => null);
+      ajukanPeminjaman({ ...payload, ...(saved?.id ? { id: String(saved.id) } : {}) });
+      setDbNotice(`Peminjaman "${fasilitasDipilih.nama}" tercatat di database. Stok berkurang 1.`);
+      setPickedFasilitas(null);
+      setKeperluan('');
+    } catch (err) {
+      setDbError(
+        err instanceof Error ? err.message : 'Gagal menyimpan ke database.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleKembali = async (loanId: string) => {
+    setDbError('');
+    setDbNotice('');
+    try {
+      const res = await fetch(`/api/peminjaman/${loanId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Dikembalikan' }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+          // Data lama lokal (PJ-xx) belum ada di DB — cukup kembalikan lokal.
+          setDbNotice('Pengembalian tercatat lokal (data lama belum ada di database).');
+        } else {
+          throw new Error(errBody?.error ?? 'Gagal update database.');
+        }
+      } else {
+        setDbNotice('Pengembalian tercatat di database. Stok bertambah 1.');
+      }
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Lokal dikembalikan, tapi gagal masuk database: ${err.message}`
+          : 'Lokal dikembalikan, tapi gagal masuk database.',
+      );
+    }
+    kembalikanPeminjaman(loanId);
   };
 
   return (
@@ -70,6 +136,19 @@ export default function PeminjamanPage() {
           </p>
         </div>
       </ScrollReveal>
+
+      {dbNotice && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
+          {dbNotice}
+        </div>
+      )}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
+      )}
 
       {myLoans.length > 0 && (
         <ScrollReveal delay={0.05}>
@@ -97,7 +176,7 @@ export default function PeminjamanPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => kembalikanPeminjaman(loan.id)}
+                      onClick={() => handleKembali(loan.id)}
                       className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100"
                     >
                       Kembalikan
@@ -224,9 +303,10 @@ export default function PeminjamanPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
                 >
-                  Konfirmasi Pinjam
+                  {saving ? 'Memproses...' : 'Konfirmasi Pinjam'}
                 </button>
               </div>
             </form>

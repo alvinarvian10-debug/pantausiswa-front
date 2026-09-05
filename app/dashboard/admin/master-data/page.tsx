@@ -18,6 +18,32 @@ type Tab = 'siswa' | 'guru' | 'kelas';
 
 const TONES: AvatarTone[] = ['emerald', 'blue', 'amber', 'red', 'slate'];
 
+function asTone(t: unknown): AvatarTone {
+  return (TONES as string[]).includes(String(t)) ? (t as AvatarTone) : 'emerald';
+}
+
+// Mapper baris DB (Prisma) → bentuk store lokal.
+function toSiswa(r: { id: string; nama: string; nis: string; kelasId?: string | null; tone?: string }): Siswa {
+  return { id: r.id, nama: r.nama, nis: r.nis, kelasId: r.kelasId ?? '', tone: asTone(r.tone) };
+}
+function toGuru(r: { id: string; nama: string; mapel?: string; waliKelasId?: string | null; tone?: string }): Guru {
+  return {
+    id: r.id,
+    nama: r.nama,
+    mapel: String(r.mapel ?? '').split(',').map((m) => m.trim()).filter(Boolean),
+    waliKelasId: r.waliKelasId ?? null,
+    tone: asTone(r.tone),
+  };
+}
+function toKelas(r: { id: string; nama: string; waliKelasId?: string | null }): Kelas {
+  return { id: r.id, nama: r.nama, waliKelasId: r.waliKelasId ?? null };
+}
+
+async function bacaError(res: Response): Promise<string> {
+  const data = await res.json().catch(() => null);
+  return data?.error ?? 'Gagal menghubungi database.';
+}
+
 interface ImportResult {
   type: 'siswa' | 'guru';
   added: number;
@@ -78,12 +104,19 @@ export default function MasterDataPage() {
     addKelas,
     updateKelas,
     deleteKelas,
-    bulkImportSiswa,
-    bulkImportGuru,
+    upsertSiswa,
+    upsertGuru,
+    upsertKelas,
+    adopsiIdSiswa,
+    adopsiIdGuru,
+    adopsiIdKelas,
   } = useAppData();
 
   const [tab, setTab] = useState<Tab>('siswa');
   const [query, setQuery] = useState('');
+  const [dbNotice, setDbNotice] = useState('');
+  const [dbError, setDbError] = useState('');
+  const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [siswaModal, setSiswaModal] = useState<{ mode: 'add' | 'edit'; data?: Siswa } | null>(null);
@@ -110,7 +143,221 @@ export default function MasterDataPage() {
     return map;
   }, [siswa]);
 
+  // -- Helper sinkronisasi: POST/PATCH/DELETE ke API, lokal mengikuti DB --------
+
+  async function tambahSiswaDB(values: { nama: string; nis: string; kelasId: string }): Promise<string | null> {
+    const tone = TONES[siswa.length % TONES.length];
+    const res = await fetch('/api/siswa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...values, tone }),
+    });
+    if (!res.ok) throw new Error(await bacaError(res));
+    const saved = await res.json();
+    addSiswa({ ...values, tone, id: String(saved.id) });
+    return null;
+  }
+
+  async function ubahSiswaDB(id: string, values: { nama: string; nis: string; kelasId: string }): Promise<string | null> {
+    const res = await fetch(`/api/siswa/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    if (res.ok) {
+      const saved = await res.json().catch(() => null);
+      if (saved?.id) updateSiswa(id, values);
+      else updateSiswa(id, values);
+      return null;
+    }
+    const errBody = await res.json().catch(() => null);
+    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+      // Data lama (S-xx): cocokkan via NIS lalu adopsi id DB.
+      const listRes = await fetch('/api/siswa');
+      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
+      const match = Array.isArray(list) ? list.find((r: { nis?: string }) => r.nis === values.nis) : null;
+      if (match?.id) {
+        const resRetry = await fetch(`/api/siswa/${match.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        if (!resRetry.ok) throw new Error(await bacaError(resRetry));
+        const saved = await resRetry.json().catch(() => null);
+        adopsiIdSiswa(id, toSiswa(saved ?? { ...match, ...values }));
+        return null;
+      }
+      // Belum ada di DB sama sekali: buatkan lalu adopsi.
+      const resPost = await fetch('/api/siswa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...values, tone: TONES[siswa.length % TONES.length] }),
+      });
+      if (!resPost.ok) throw new Error(await bacaError(resPost));
+      const saved = await resPost.json();
+      adopsiIdSiswa(id, toSiswa(saved));
+      return null;
+    }
+    throw new Error(errBody?.error ?? 'Gagal update database.');
+  }
+
+  async function hapusSiswaDB(id: string): Promise<string | null> {
+    const res = await fetch(`/api/siswa/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      deleteSiswa(id);
+      return null;
+    }
+    const errBody = await res.json().catch(() => null);
+    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+      deleteSiswa(id); // data lama lokal — cukup hapus lokal
+      return null;
+    }
+    throw new Error(errBody?.error ?? 'Gagal hapus database.');
+  }
+
+  async function tambahGuruDB(values: { nama: string; mapel: string[]; waliKelasId: string | null }): Promise<string | null> {
+    const tone = TONES[guru.length % TONES.length];
+    const res = await fetch('/api/guru', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...values, tone }),
+    });
+    if (!res.ok) throw new Error(await bacaError(res));
+    const saved = await res.json();
+    addGuru({ ...values, tone, id: String(saved.id) });
+    return null;
+  }
+
+  async function ubahGuruDB(id: string, values: { nama: string; mapel: string[]; waliKelasId: string | null }): Promise<string | null> {
+    const res = await fetch(`/api/guru/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    if (res.ok) {
+      updateGuru(id, values);
+      return null;
+    }
+    const errBody = await res.json().catch(() => null);
+    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+      const listRes = await fetch('/api/guru');
+      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
+      const match = Array.isArray(list) ? list.find((r: { nama?: string }) => r.nama === values.nama) : null;
+      if (match?.id) {
+        const resRetry = await fetch(`/api/guru/${match.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        if (!resRetry.ok) throw new Error(await bacaError(resRetry));
+        const saved = await resRetry.json().catch(() => null);
+        adopsiIdGuru(id, toGuru(saved ?? { ...match, mapel: values.mapel.join(', '), waliKelasId: values.waliKelasId }));
+        return null;
+      }
+      const resPost = await fetch('/api/guru', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...values, tone: TONES[guru.length % TONES.length] }),
+      });
+      if (!resPost.ok) throw new Error(await bacaError(resPost));
+      const saved = await resPost.json();
+      adopsiIdGuru(id, toGuru(saved));
+      return null;
+    }
+    throw new Error(errBody?.error ?? 'Gagal update database.');
+  }
+
+  async function hapusGuruDB(id: string): Promise<string | null> {
+    const res = await fetch(`/api/guru/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      deleteGuru(id);
+      return null;
+    }
+    const errBody = await res.json().catch(() => null);
+    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+      deleteGuru(id);
+      return null;
+    }
+    throw new Error(errBody?.error ?? 'Gagal hapus database.');
+  }
+
+  async function tambahKelasDB(values: { nama: string; waliKelasId: string | null }): Promise<string | null> {
+    const res = await fetch('/api/kelas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    if (!res.ok) throw new Error(await bacaError(res));
+    const saved = await res.json();
+    addKelas({ ...values, id: String(saved.id) });
+    return null;
+  }
+
+  async function ubahKelasDB(id: string, values: { nama: string; waliKelasId: string | null }): Promise<string | null> {
+    const res = await fetch(`/api/kelas/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    if (res.ok) {
+      updateKelas(id, values);
+      return null;
+    }
+    const errBody = await res.json().catch(() => null);
+    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+      const listRes = await fetch('/api/kelas');
+      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
+      const match = Array.isArray(list) ? list.find((r: { nama?: string }) => r.nama === values.nama) : null;
+      if (match?.id) {
+        const resRetry = await fetch(`/api/kelas/${match.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        if (!resRetry.ok) throw new Error(await bacaError(resRetry));
+        const saved = await resRetry.json().catch(() => null);
+        adopsiIdKelas(id, toKelas(saved ?? { ...match, ...values }));
+        return null;
+      }
+      const resPost = await fetch('/api/kelas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      if (!resPost.ok) throw new Error(await bacaError(resPost));
+      const saved = await resPost.json();
+      adopsiIdKelas(id, toKelas(saved));
+      return null;
+    }
+    throw new Error(errBody?.error ?? 'Gagal update database.');
+  }
+
+  async function hapusKelasDB(id: string): Promise<string | null> {
+    const res = await fetch(`/api/kelas/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      deleteKelas(id);
+      return null;
+    }
+    const errBody = await res.json().catch(() => null);
+    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
+      deleteKelas(id);
+      return null;
+    }
+    throw new Error(errBody?.error ?? 'Gagal hapus database.');
+  }
+
   const handleImportClick = () => fileInputRef.current?.click();
+
+  // Gabungkan baris hasil impor server ke lokal; baris lokal dengan kunci
+  // sama (NIS/nama) dimigrasi ke id DB agar tidak ganda.
+  function gabungKelasImpor(list: { id: string; nama: string; waliKelasId?: string | null }[]) {
+    for (const k of list) {
+      const row = toKelas(k);
+      const lokal = kelas.find((x) => x.id !== row.id && x.nama.toLowerCase() === row.nama.toLowerCase());
+      if (lokal) adopsiIdKelas(lokal.id, row);
+      else upsertKelas(row);
+    }
+  }
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,6 +365,8 @@ export default function MasterDataPage() {
     if (!file) return;
 
     setImporting(true);
+    setDbError('');
+    setDbNotice('');
     try {
       const rows = await parseExcelFile(file);
       if (tab === 'siswa') {
@@ -126,34 +375,78 @@ export default function MasterDataPage() {
           nis: cell(r, 'NIS', 'nis'),
           kelasNama: cell(r, 'Kelas', 'kelas'),
         }));
-        const result = bulkImportSiswa(mapped);
-        setImportResult({ type: 'siswa', ...result });
+        const res = await fetch('/api/import/siswa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: mapped }),
+        });
+        if (!res.ok) throw new Error(await bacaError(res));
+        const data = await res.json();
+        gabungKelasImpor(data.createdKelas ?? []);
+        for (const s of data.created ?? []) {
+          const row = toSiswa(s);
+          const lokal = siswa.find((x) => x.id !== row.id && x.nis === row.nis);
+          if (lokal) adopsiIdSiswa(lokal.id, row);
+          else upsertSiswa(row);
+        }
+        setImportResult({ type: 'siswa', added: data.added, skipped: data.skipped ?? [] });
+        setDbNotice(`${data.added} siswa tersimpan di database XAMPP.`);
       } else if (tab === 'guru') {
         const mapped = rows.map((r) => ({
           nama: cell(r, 'Nama', 'nama'),
           mapel: cell(r, 'Mata Pelajaran', 'mapel').split(',').map((m) => m.trim()).filter(Boolean),
           waliKelasNama: cell(r, 'Wali Kelas', 'wali kelas') || null,
         }));
-        const result = bulkImportGuru(mapped);
-        setImportResult({ type: 'guru', ...result });
+        const res = await fetch('/api/import/guru', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: mapped }),
+        });
+        if (!res.ok) throw new Error(await bacaError(res));
+        const data = await res.json();
+        gabungKelasImpor(data.createdKelas ?? []);
+        for (const g of data.created ?? []) {
+          const row = toGuru(g);
+          const lokal = guru.find((x) => x.id !== row.id && x.nama === row.nama);
+          if (lokal) adopsiIdGuru(lokal.id, row);
+          else upsertGuru(row);
+        }
+        setImportResult({ type: 'guru', added: data.added, skipped: data.skipped ?? [] });
+        setDbNotice(`${data.added} guru tersimpan di database XAMPP.`);
       }
-    } catch {
+    } catch (err) {
+      const pesan =
+        err instanceof Error && err.message && err.message !== 'Failed to fetch'
+          ? err.message
+          : 'Berkas tidak dapat dibaca. Pastikan format .xlsx sesuai template.';
+      setDbError(pesan);
       setImportResult({
         type: tab === 'guru' ? 'guru' : 'siswa',
         added: 0,
-        skipped: [{ row: 0, reason: 'Berkas tidak dapat dibaca. Pastikan format .xlsx sesuai template.' }],
+        skipped: [{ row: 0, reason: pesan }],
       });
     } finally {
       setImporting(false);
     }
   };
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    if (deleteTarget.type === 'siswa') deleteSiswa(deleteTarget.id);
-    if (deleteTarget.type === 'guru') deleteGuru(deleteTarget.id);
-    if (deleteTarget.type === 'kelas') deleteKelas(deleteTarget.id);
-    setDeleteTarget(null);
+  const confirmDelete = async () => {
+    if (!deleteTarget || busy) return;
+    const target = deleteTarget;
+    setBusy(true);
+    setDbError('');
+    setDbNotice('');
+    try {
+      if (target.type === 'siswa') await hapusSiswaDB(target.id);
+      if (target.type === 'guru') await hapusGuruDB(target.id);
+      if (target.type === 'kelas') await hapusKelasDB(target.id);
+      setDbNotice(`"${target.label}" dihapus dari database.`);
+      setDeleteTarget(null);
+    } catch (err) {
+      setDbError(err instanceof Error ? err.message : 'Gagal hapus database.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -198,6 +491,19 @@ export default function MasterDataPage() {
           </div>
         </GlassCard>
       </StaggerGroup>
+
+      {dbNotice && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
+          {dbNotice}
+        </div>
+      )}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -449,13 +755,22 @@ export default function MasterDataPage() {
           initial={siswaModal.data}
           kelasList={kelas}
           onClose={() => setSiswaModal(null)}
-          onSubmit={(values) => {
-            if (siswaModal.mode === 'add') {
-              addSiswa({ ...values, tone: TONES[siswa.length % TONES.length] });
-            } else if (siswaModal.data) {
-              updateSiswa(siswaModal.data.id, values);
+          onSubmit={async (values) => {
+            setDbError('');
+            setDbNotice('');
+            try {
+              if (siswaModal.mode === 'add') {
+                await tambahSiswaDB(values);
+                setDbNotice(`Siswa "${values.nama}" tersimpan di database.`);
+              } else if (siswaModal.data) {
+                await ubahSiswaDB(siswaModal.data.id, values);
+                setDbNotice(`Perubahan "${values.nama}" tersimpan di database.`);
+              }
+              setSiswaModal(null);
+              return null;
+            } catch (err) {
+              return err instanceof Error ? err.message : 'Gagal menyimpan ke database.';
             }
-            setSiswaModal(null);
           }}
         />
       )}
@@ -466,13 +781,22 @@ export default function MasterDataPage() {
           initial={guruModal.data}
           kelasList={kelas}
           onClose={() => setGuruModal(null)}
-          onSubmit={(values) => {
-            if (guruModal.mode === 'add') {
-              addGuru({ ...values, tone: TONES[guru.length % TONES.length] });
-            } else if (guruModal.data) {
-              updateGuru(guruModal.data.id, values);
+          onSubmit={async (values) => {
+            setDbError('');
+            setDbNotice('');
+            try {
+              if (guruModal.mode === 'add') {
+                await tambahGuruDB(values);
+                setDbNotice(`Guru "${values.nama}" tersimpan di database.`);
+              } else if (guruModal.data) {
+                await ubahGuruDB(guruModal.data.id, values);
+                setDbNotice(`Perubahan "${values.nama}" tersimpan di database.`);
+              }
+              setGuruModal(null);
+              return null;
+            } catch (err) {
+              return err instanceof Error ? err.message : 'Gagal menyimpan ke database.';
             }
-            setGuruModal(null);
           }}
         />
       )}
@@ -483,13 +807,22 @@ export default function MasterDataPage() {
           initial={kelasModal.data}
           guruList={guru}
           onClose={() => setKelasModal(null)}
-          onSubmit={(values) => {
-            if (kelasModal.mode === 'add') {
-              addKelas(values);
-            } else if (kelasModal.data) {
-              updateKelas(kelasModal.data.id, values);
+          onSubmit={async (values) => {
+            setDbError('');
+            setDbNotice('');
+            try {
+              if (kelasModal.mode === 'add') {
+                await tambahKelasDB(values);
+                setDbNotice(`Kelas "${values.nama}" tersimpan di database.`);
+              } else if (kelasModal.data) {
+                await ubahKelasDB(kelasModal.data.id, values);
+                setDbNotice(`Perubahan "${values.nama}" tersimpan di database.`);
+              }
+              setKelasModal(null);
+              return null;
+            } catch (err) {
+              return err instanceof Error ? err.message : 'Gagal menyimpan ke database.';
             }
-            setKelasModal(null);
           }}
         />
       )}
@@ -497,6 +830,7 @@ export default function MasterDataPage() {
       {deleteTarget && (
         <ConfirmDeleteModal
           label={deleteTarget.label}
+          busy={busy}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmDelete}
         />
@@ -524,20 +858,26 @@ function SiswaFormModal({
   initial?: Siswa;
   kelasList: Kelas[];
   onClose: () => void;
-  onSubmit: (values: { nama: string; nis: string; kelasId: string }) => void;
+  onSubmit: (values: { nama: string; nis: string; kelasId: string }) => Promise<string | null>;
 }) {
   const [nama, setNama] = useState(initial?.nama ?? '');
   const [nis, setNis] = useState(initial?.nis ?? '');
   const [kelasId, setKelasId] = useState(initial?.kelasId ?? kelasList[0]?.id ?? '');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!nama.trim() || !nis.trim() || !kelasId) {
       setError('Semua kolom wajib diisi.');
       return;
     }
-    onSubmit({ nama: nama.trim(), nis: nis.trim(), kelasId });
+    setSaving(true);
+    setError('');
+    const err = await onSubmit({ nama: nama.trim(), nis: nis.trim(), kelasId });
+    setSaving(false);
+    if (err) setError(err);
   };
 
   return (
@@ -598,10 +938,10 @@ function SiswaFormModal({
             </button>
             <button
               type="submit"
-              disabled={kelasList.length === 0}
+              disabled={kelasList.length === 0 || saving}
               className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
             >
-              {mode === 'add' ? 'Tambah Siswa' : 'Simpan Perubahan'}
+              {saving ? 'Menyimpan...' : mode === 'add' ? 'Tambah Siswa' : 'Simpan Perubahan'}
             </button>
           </div>
         </form>
@@ -625,21 +965,27 @@ function GuruFormModal({
   initial?: Guru;
   kelasList: Kelas[];
   onClose: () => void;
-  onSubmit: (values: { nama: string; mapel: string[]; waliKelasId: string | null }) => void;
+  onSubmit: (values: { nama: string; mapel: string[]; waliKelasId: string | null }) => Promise<string | null>;
 }) {
   const [nama, setNama] = useState(initial?.nama ?? '');
   const [mapelText, setMapelText] = useState(initial?.mapel.join(', ') ?? '');
   const [waliKelasId, setWaliKelasId] = useState<string>(initial?.waliKelasId ?? '');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const mapel = mapelText.split(',').map((m) => m.trim()).filter(Boolean);
     if (!nama.trim() || mapel.length === 0) {
       setError('Nama dan minimal satu mata pelajaran wajib diisi.');
       return;
     }
-    onSubmit({ nama: nama.trim(), mapel, waliKelasId: waliKelasId || null });
+    setSaving(true);
+    setError('');
+    const err = await onSubmit({ nama: nama.trim(), mapel, waliKelasId: waliKelasId || null });
+    setSaving(false);
+    if (err) setError(err);
   };
 
   return (
@@ -699,9 +1045,10 @@ function GuruFormModal({
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              disabled={saving}
+              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
             >
-              {mode === 'add' ? 'Tambah Guru' : 'Simpan Perubahan'}
+              {saving ? 'Menyimpan...' : mode === 'add' ? 'Tambah Guru' : 'Simpan Perubahan'}
             </button>
           </div>
         </form>
@@ -725,19 +1072,25 @@ function KelasFormModal({
   initial?: Kelas;
   guruList: Guru[];
   onClose: () => void;
-  onSubmit: (values: { nama: string; waliKelasId: string | null }) => void;
+  onSubmit: (values: { nama: string; waliKelasId: string | null }) => Promise<string | null>;
 }) {
   const [nama, setNama] = useState(initial?.nama ?? '');
   const [waliKelasId, setWaliKelasId] = useState<string>(initial?.waliKelasId ?? '');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!nama.trim()) {
       setError('Nama kelas wajib diisi.');
       return;
     }
-    onSubmit({ nama: nama.trim(), waliKelasId: waliKelasId || null });
+    setSaving(true);
+    setError('');
+    const err = await onSubmit({ nama: nama.trim(), waliKelasId: waliKelasId || null });
+    setSaving(false);
+    if (err) setError(err);
   };
 
   return (
@@ -783,9 +1136,10 @@ function KelasFormModal({
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              disabled={saving}
+              className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
             >
-              {mode === 'add' ? 'Tambah Kelas' : 'Simpan Perubahan'}
+              {saving ? 'Menyimpan...' : mode === 'add' ? 'Tambah Kelas' : 'Simpan Perubahan'}
             </button>
           </div>
         </form>
@@ -800,10 +1154,12 @@ function KelasFormModal({
 
 function ConfirmDeleteModal({
   label,
+  busy,
   onCancel,
   onConfirm,
 }: {
   label: string;
+  busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -822,16 +1178,18 @@ function ConfirmDeleteModal({
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-slate-50"
+            disabled={busy}
+            className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
           >
             Batal
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+            disabled={busy}
+            className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-500/70"
           >
-            Ya, Hapus
+            {busy ? 'Menghapus...' : 'Ya, Hapus'}
           </button>
         </div>
       </GlassCard>

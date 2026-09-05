@@ -1,17 +1,13 @@
 'use client';
 
 /**
- * Client-side session management.
+ * Client-side session cache.
  *
- * This app has no real backend yet, so "sessions" live in localStorage —
- * good enough to stop casual URL-typing/demo-button access, but NOT a
- * substitute for real server-side auth. A determined attacker can still
- * read the client JS bundle or disable JS to see the first server-rendered
- * paint. The correct long-term fix is a real backend (e.g. the
- * Prisma/MySQL setup already being explored) that issues an HttpOnly
- * session cookie validated in Next.js middleware — cookies (unlike
- * localStorage) are readable server-side, which is what actually lets you
- * block a request before any page content is ever sent to the browser.
+ * Sesi resmi hidup di cookie HttpOnly (`pantausiswa.session`, JWT) yang
+ * diverifikasi server-side di `middleware.ts` — cookie-lah yang benar-benar
+ * memblokir request tak berhak ke /dashboard/*. Salinan di localStorage ini
+ * hanya cache untuk UI client (role, username, secretaryId); selalu diisi
+ * dari respons /api/auth/login dan dibersihkan saat logout.
  */
 
 export type SessionRole = 'student' | 'guru' | 'admin' | 'secretary';

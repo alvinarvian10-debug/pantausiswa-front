@@ -12,6 +12,8 @@ export default function TugasPage() {
   const [tipe, setTipe] = useState<TipeSubmisi>('File');
   const [konten, setKonten] = useState('');
   const [namaFile, setNamaFile] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [dbError, setDbError] = useState('');
 
   const me = getSiswa(CURRENT_SISWA_ID);
 
@@ -52,12 +54,37 @@ export default function TugasPage() {
     setNamaFile(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeTugas) return;
+    if (!activeTugas || submitting) return;
+    const tugasId = activeTugas.id;
     const finalKonten = tipe === 'Link' ? konten.trim() : tipe === 'File' ? (namaFile ?? '') : konten;
     if (!finalKonten) return;
-    submitTugas({ tugasId: activeTugas.id, siswaId: CURRENT_SISWA_ID, tipe, konten: finalKonten });
+    setSubmitting(true);
+    setDbError('');
+    // Simpan ke MySQL dulu (upsert per tugas+siswa) — pakai id DB sebagai id lokal.
+    let dbId: string | undefined;
+    try {
+      const res = await fetch('/api/submisi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tugasId, siswaId: CURRENT_SISWA_ID, tipe, konten: finalKonten }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      }
+      const saved = await res.json().catch(() => null);
+      if (saved?.id) dbId = String(saved.id);
+    } catch (err) {
+      setDbError(
+        err instanceof Error
+          ? `Tersimpan lokal, tapi gagal masuk database: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk database.',
+      );
+    }
+    submitTugas({ tugasId, siswaId: CURRENT_SISWA_ID, tipe, konten: finalKonten, ...(dbId ? { id: dbId } : {}) });
+    setSubmitting(false);
     setActiveTugas(null);
   };
 
@@ -99,6 +126,13 @@ export default function TugasPage() {
           </GlassCard>
         ))}
       </StaggerGroup>
+
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {dbError}
+        </div>
+      )}
 
       <ScrollReveal delay={0.1}>
         <section>
@@ -253,9 +287,10 @@ export default function TugasPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                  disabled={submitting}
+                  className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
                 >
-                  Kumpulkan
+                  {submitting ? 'Mengumpulkan...' : 'Kumpulkan'}
                 </button>
               </div>
             </form>
