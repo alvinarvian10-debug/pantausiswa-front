@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Catatan: ini hanya deploy FRONTEND. Backend NestJS (sysch/back) deploy
+# terpisah (VPS/Railway/dll), lalu set NEXT_PUBLIC_API_URL + JWT_SECRET
+# yang sama di environment Netlify.
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
