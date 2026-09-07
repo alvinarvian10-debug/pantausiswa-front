@@ -1,137 +1,96 @@
-# Panduan Setup — PantauSiswa + XAMPP
+# Panduan Setup — PantauSiswa (split front + back) + XAMPP
 
-Panduan untuk menjalankan project ini dari nol di komputer baru (Windows + XAMPP).
+Panduan menjalankan project dari nol di komputer baru (Windows + XAMPP).
+
+Arsitektur: `front` (Next.js, port 3000) → proxy `/api/be/*` → `back`
+(NestJS, port 4000) → MySQL XAMPP (database `sysch`).
 
 ## 1. Instal yang dibutuhkan
 
-1. **XAMPP** (pakai PHP versi berapa pun, yang penting ada MySQL/MariaDB) — https://www.apachefriends.org
-2. **Node.js versi 20 LTS** (atau lebih baru) — https://nodejs.org
+1. **XAMPP** (yang penting MySQL/MariaDB) — https://www.apachefriends.org
+2. **Node.js 20 LTS** atau lebih baru — https://nodejs.org
 3. **Git** — https://git-scm.com
-
-Cek instalasi:
 
 ```powershell
 node --version   # minimal v20
 npm --version
 ```
 
-## 2. Nyalakan MySQL di XAMPP
+## 2. Nyalakan MySQL + buat database
 
-1. Buka **XAMPP Control Panel** → klik **Start** pada baris **MySQL** (tombol berubah hijau).
-2. Apache **tidak wajib** (hanya perlu kalau mau buka phpMyAdmin).
-
-## 3. Buat database
-
-Buka shell MySQL XAMPP lalu jalankan:
-
-```sql
-CREATE DATABASE `pantausiswa-db`;
-```
-
-Cara cepat via PowerShell (sesuaikan path XAMPP bila beda):
+1. XAMPP Control Panel → **Start** MySQL.
+2. Buat database `sysch`:
 
 ```powershell
-& "C:\xampp\mysql\bin\mysql.exe" -u root -e "CREATE DATABASE IF NOT EXISTS \`pantausiswa-db\`;"
+& "C:\xampp\mysql\bin\mysql.exe" -u root -e "CREATE DATABASE IF NOT EXISTS sysch CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 
-> Kalau user `root` MySQL-mu **ada password** (misal `rahasia`), catat — dipakai di langkah 5.
+> Kalau root MySQL ada password, sesuaikan `DATABASE_URL` di `back/.env`.
 
-## 4. Clone project + instal dependency
-
-```powershell
-git clone <URL-REPO-KAMU>
-cd front
-npm install
-```
-
-## 5. Buat file `.env`
-
-Salin template lalu isi:
+## 3. Backend (`sysch/back`)
 
 ```powershell
+cd sysch\back
 copy .env.example .env
+npm install
+npx prisma migrate deploy
+npm run db:seed
+npm run start:dev
 ```
 
-Isi `.env`:
+Tunggu `🚀 PantauSiswa API running at http://localhost:4000/api`.
 
-```env
-DATABASE_URL="mysql://root:@localhost:3306/pantausiswa-db"
-SESSION_SECRET="<acak 64 karakter>"
-SETUP_KEY="<acak 48 karakter>"
-```
+Isi penting `.env`: `DATABASE_URL`, `JWT_SECRET` (acak, lihat bawah),
+`PORT=4000`, `CORS_ORIGIN="http://localhost:3000"`.
 
-* `DATABASE_URL` — kalau root ada password: `mysql://root:rahasia@localhost:3306/pantausiswa-db`. Kalau nama DB beda, sesuaikan bagian akhirnya.
-* Generate kunci acak:
+Generate secret baru (wajib beda tiap environment):
 
 ```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-> `.env` **jangan pernah di-commit** (sudah masuk `.gitignore`).
-
-## 6. Buat tabel database
+## 4. Frontend (`sysch/front`, terminal baru)
 
 ```powershell
-npx prisma db push
-```
-
-Perintah ini membuat seluruh tabel (`user`, `complaint`, `leaverequest`, `attendance`, `assignment`, `submission`, `facility`, `loan`, `schoolclass`, `student`, `teacher`) sekaligus generate Prisma Client. Tunggu sampai muncul `Your database is now in sync`.
-
-## 7. Jalankan aplikasi + seeding akun
-
-```powershell
+cd sysch\front
+copy .env.example .env
+npm install
 npm run dev
 ```
 
-Di terminal **baru** (biarkan `npm run dev` jalan), seeding 5 akun awal:
+Isi `.env`: `NEXT_PUBLIC_API_URL="http://localhost:4000/api"` dan
+`JWT_SECRET` — **sama persis** dengan `back/.env` (dipakai middleware +
+cookie sesi). Buka http://localhost:3000/login.
 
-```powershell
-Invoke-RestMethod -Uri "http://localhost:3000/api/auth/seed" -Method Post -ContentType "application/json" -Body '{"key":"ISI_SETUP_KEY_MU"}'
-```
+> Setiap ubah `.env` → restart dev server-nya. Ganti `JWT_SECRET` →
+> semua user harus login ulang.
 
-Berhasil bila respons berisi `admin`, `guru`, `siswa`, `sekretaris.xipa1`, `sekretaris.xipa2`.
+## 5. Akun seed (semua password `password123`)
 
-> Alternatif Git Bash / curl:
-> `curl -X POST http://localhost:3000/api/auth/seed -H "Content-Type: application/json" -d '{"key":"ISI_SETUP_KEY_MU"}'`
+| Peran | Email |
+|---|---|
+| Admin | `admin@sysch.id` |
+| Guru | `budi@sysch.id`, `sari@sysch.id` |
+| Siswa | `fauzi@student.sysch.id`, `rina@student.sysch.id`, `dimas@student.sysch.id`, `sinta@student.sysch.id`, `andre@student.sysch.id` |
+| Sekretaris | `sekretaris.mipa1@sysch.id`, `sekretaris.ips2@sysch.id` |
 
-## 8. Login
+Akun impor Excel / manual: password default `password123`.
 
-Buka http://localhost:3000/login — **pilih peran dulu**, baru isi akun:
+## 6. Cek data
 
-| Peran | Username | Password |
-|---|---|---|
-| Admin | `admin` | `admin123` |
-| Guru | `guru` | `guru123` |
-| Siswa | `siswa` | `siswa123` |
-| Sekretaris X IPA 1 | `sekretaris.xipa1` | `sekretaris123` |
-| Sekretaris X IPA 2 | `sekretaris.xipa2` | `sekretaris123` |
-
-⚠️ **Akun di atas hanya untuk demo. Ganti passwordnya** setelah login (atau via database) sebelum dipakai serius.
-
-## 9. Bereskan sisa setup (disarankan)
-
-1. Hapus folder `app/api/auth/seed/`, lalu hapus baris `SETUP_KEY` dari `.env`.
-2. Restart `npm run dev`.
-
-## 10. Cek data masuk database
-
-* phpMyAdmin: http://localhost/phpmyadmin → database `pantausiswa-db` (perlu Apache jalan), atau
-* `npx prisma studio` (UI database di browser).
+* phpMyAdmin: http://localhost/phpmyadmin → database `sysch` (perlu Apache jalan).
+* Banner kuning "Backend tidak terjangkau" di dashboard = back mati / salah URL.
 
 ---
 
 ## Troubleshooting
 
-| Gejala | Penyebab & solusi |
+| Gejala | Solusi |
 |---|---|
-| `Can't reach database` / `Connection refused` | MySQL XAMPP belum di-Start. Nyalakan di XAMPP Control Panel. |
-| `Access denied for user 'root'` | Root ada password → sesuaikan `DATABASE_URL`. Atau reset password root via phpMyAdmin. |
-| `Unknown database 'pantausiswa-db'` | Database belum dibuat → ulangi langkah 3. |
-| Tabel kosong / `table doesn't exist` | Lupa langkah 6 → jalankan `npx prisma db push`. |
-| Login: "Username tidak terdaftar" | Belum seeding → ulangi langkah 7 (pastikan `npm run dev` jalan dan `SETUP_KEY` sama). |
-| Login: disuruh pilih peran / peran salah | Pilih tombol peran sesuai akun (Admin/Guru/Siswa/Sekretaris) sebelum tekan Masuk. |
-| Seed: `Kunci salah` (403) | Isi `key` tidak sama dengan `SETUP_KEY` di `.env`. Setelah ubah `.env`, **restart `npm run dev`**. |
-| `EPERM ... query_engine` saat generate | Ada proses `node` ganda mengunci file. Matikan semua (`taskkill /F /IM node.exe`), ulangi perintah. |
-| Port 3000 dipakai | Matikan proses node lain, atau jalankan `npx next dev -p 3001` (URL jadi http://localhost:3001). |
-| `.env` diubah tapi tidak berpengaruh | Restart `npm run dev` setiap kali mengubah `.env`. |
+| `Can't reach database` | MySQL belum Start. |
+| `Unknown database 'sysch'` | Ulangi langkah 2. |
+| `Access denied for user 'root'` | Sesuaikan password di `DATABASE_URL`. |
+| Login gagal setelah ganti secret | Wajar — login ulang; restart kedua service. |
+| `EPERM ... query_engine` saat generate | Proses node ganda mengunci file. Matikan backend (`Ctrl+C`), ulangi. |
+| Port 3000/4000 dipakai | Matikan proses lama. Cek: `Get-NetTCPConnection -LocalPort 3000 -State Listen`. |
+| Dashboard redirect ke login terus | Cookie sesi hilang/kedaluwarsa → login ulang. |

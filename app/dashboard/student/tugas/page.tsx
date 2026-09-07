@@ -1,14 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import { apiMyTugas, apiSubmitTugas, type BackendTugas } from '../../../../lib/api';
 import { CURRENT_SISWA_ID, TipeSubmisi, Tugas, useAppData } from '../../../../lib/store';
 
 export default function TugasPage() {
   const { tugas, submisi, getSiswa, submitTugas } = useAppData();
-  const [activeTugas, setActiveTugas] = useState<Tugas | null>(null);
+  const [activeTugas, setActiveTugas] = useState<BarisTugas | null>(null);
   const [tipe, setTipe] = useState<TipeSubmisi>('File');
   const [konten, setKonten] = useState('');
   const [namaFile, setNamaFile] = useState<string | null>(null);
@@ -17,24 +18,95 @@ export default function TugasPage() {
 
   const me = getSiswa(CURRENT_SISWA_ID);
 
-  const myTugas = useMemo(
-    () => (me ? tugas.filter((t) => t.kelasId === me.kelasId) : []),
-    [tugas, me],
-  );
+  // Sumber kebenaran: backend bila terjangkau (beserta submissionSaya), lokal bila tidak.
+  const [beTugas, setBeTugas] = useState<BackendTugas[] | null>(null);
 
-  const mySubmisi = useMemo(
-    () => submisi.filter((s) => s.siswaId === CURRENT_SISWA_ID),
-    [submisi],
-  );
+  const muatBackend = async () => {
+    try {
+      setBeTugas(await apiMyTugas());
+    } catch {
+      setBeTugas(null);
+    }
+  };
 
-  const findSubmisi = (tugasId: string) => mySubmisi.find((s) => s.tugasId === tugasId);
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  interface BarisTugas {
+    key: string;
+    backendId: number | null;
+    tugasIdLokal: string | null;
+    mapel: string;
+    judul: string;
+    deskripsi: string;
+    lampiranNama: string | null;
+    lampiranLink: string | null;
+    deadline: string;
+    submisi: {
+      status: 'Menunggu Nilai' | 'Dinilai';
+      nilai: number | null;
+      feedback: string | null;
+      konten: string;
+    } | null;
+  }
+
+  const barisTugas: BarisTugas[] = useMemo(() => {
+    if (beTugas !== null) {
+      return beTugas.map((t) => {
+        const sub = t.submissionSaya;
+        return {
+          key: `be-${t.id}`,
+          backendId: t.id,
+          tugasIdLokal: null,
+          mapel: t.mapel?.nama ?? '-',
+          judul: t.judul,
+          deskripsi: t.deskripsi,
+          lampiranNama: null,
+          lampiranLink: t.lampiranUrl,
+          deadline: t.tenggat.slice(0, 10),
+          submisi: sub
+            ? {
+                status: sub.nilai !== null && sub.nilai !== undefined ? 'Dinilai' : 'Menunggu Nilai',
+                nilai: sub.nilai,
+                feedback: sub.feedback,
+                konten: sub.fileUrl,
+              }
+            : null,
+        };
+      });
+    }
+    const lokal = me ? tugas.filter((t) => t.kelasId === me.kelasId) : [];
+    const mySubmisi = submisi.filter((s) => s.siswaId === CURRENT_SISWA_ID);
+    return lokal.map((t) => {
+      const s = mySubmisi.find((x) => x.tugasId === t.id);
+      return {
+        key: `lokal-${t.id}`,
+        backendId: null,
+        tugasIdLokal: t.id,
+        mapel: t.mapel,
+        judul: t.judul,
+        deskripsi: t.deskripsi,
+        lampiranNama: t.lampiranNama,
+        lampiranLink: t.lampiranLink,
+        deadline: t.deadline,
+        submisi: s
+          ? { status: s.status, nilai: s.nilai, feedback: s.feedback, konten: s.konten }
+          : null,
+      };
+    });
+  }, [beTugas, tugas, submisi, me]);
+
+  const myTugas = barisTugas;
+
+  const findSubmisi = (key: string) => barisTugas.find((t) => t.key === key)?.submisi ?? null;
 
   const isTerlambat = (deadline: string) => new Date(deadline) < new Date(new Date().toISOString().slice(0, 10));
 
   const stats = useMemo(() => {
     let aktif = 0, selesai = 0, lewat = 0;
     myTugas.forEach((t) => {
-      const s = findSubmisi(t.id);
+      const s = findSubmisi(t.key);
       if (s) selesai += 1;
       else if (isTerlambat(t.deadline)) lewat += 1;
       else aktif += 1;
@@ -45,9 +117,9 @@ export default function TugasPage() {
       { label: 'Melewati Tenggat', count: lewat, chip: 'bg-red-50 text-red-600 ring-red-100', icon: 'event_busy' },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTugas, mySubmisi]);
+  }, [myTugas]);
 
-  const openSubmit = (t: Tugas) => {
+  const openSubmit = (t: BarisTugas) => {
     setActiveTugas(t);
     setTipe('File');
     setKonten('');
@@ -57,33 +129,40 @@ export default function TugasPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTugas || submitting) return;
-    const tugasId = activeTugas.id;
     const finalKonten = tipe === 'Link' ? konten.trim() : tipe === 'File' ? (namaFile ?? '') : konten;
     if (!finalKonten) return;
     setSubmitting(true);
     setDbError('');
-    // Simpan ke MySQL dulu (upsert per tugas+siswa) — pakai id DB sebagai id lokal.
-    let dbId: string | undefined;
+    // Simpan ke backend NestJS dulu (upsert per tugas+siswa).
     try {
-      const res = await fetch('/api/submisi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tugasId, siswaId: CURRENT_SISWA_ID, tipe, konten: finalKonten }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      let numericTugasId = activeTugas.backendId;
+      if (numericTugasId === null) {
+        // Data lokal lama (mis. "TG-01"): cocokkan judul ke daftar backend.
+        const daftar = await apiMyTugas();
+        const match = daftar.find((t) => t.judul === activeTugas.judul);
+        if (!match) {
+          throw new Error(
+            'Tugas belum ada di backend. Minta guru buat ulang lewat backend.',
+          );
+        }
+        numericTugasId = match.id;
       }
-      const saved = await res.json().catch(() => null);
-      if (saved?.id) dbId = String(saved.id);
+      await apiSubmitTugas(numericTugasId, {
+        fileUrl: finalKonten,
+        catatan: `tipe:${tipe}${namaFile ? `|${namaFile}` : ''}`,
+      });
+      await muatBackend();
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Tersimpan lokal, tapi gagal masuk database: ${err.message}`
-          : 'Tersimpan lokal, tapi gagal masuk database.',
+          ? `Gagal masuk backend: ${err.message}`
+          : 'Gagal masuk backend.',
       );
+      // Fallback lokal hanya untuk baris lokal (baris backend tak ada di store).
+      if (activeTugas.backendId === null && activeTugas.tugasIdLokal) {
+        submitTugas({ tugasId: activeTugas.tugasIdLokal, siswaId: CURRENT_SISWA_ID, tipe, konten: finalKonten });
+      }
     }
-    submitTugas({ tugasId, siswaId: CURRENT_SISWA_ID, tipe, konten: finalKonten, ...(dbId ? { id: dbId } : {}) });
     setSubmitting(false);
     setActiveTugas(null);
   };
@@ -139,11 +218,11 @@ export default function TugasPage() {
           <h2 className="mb-4 text-lg font-semibold text-gray-900">Daftar Tugas</h2>
           <div className="flex flex-col gap-4">
             {myTugas.map((t) => {
-              const s = findSubmisi(t.id);
+              const s = findSubmisi(t.key);
               const terlambat = !s && isTerlambat(t.deadline);
               return (
                 <GlassCard
-                  key={t.id}
+                  key={t.key}
                   className="flex flex-col gap-4 p-5 transition-all duration-300 hover:-translate-y-0.5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex flex-1 flex-col gap-2">

@@ -3,11 +3,10 @@
 /**
  * Client-side session cache.
  *
- * Sesi resmi hidup di cookie HttpOnly (`pantausiswa.session`, JWT) yang
- * diverifikasi server-side di `middleware.ts` — cookie-lah yang benar-benar
- * memblokir request tak berhak ke /dashboard/*. Salinan di localStorage ini
- * hanya cache untuk UI client (role, username, secretaryId); selalu diisi
- * dari respons /api/auth/login dan dibersihkan saat logout.
+ * Backend = NestJS di `sysch/back`. Login mengembalikan Bearer JWT
+ * (disimpan via lib/api.ts). Cookie `pantausiswa.session` berisi token
+ * yang sama agar `middleware.ts` bisa guard /dashboard/* server-side.
+ * Salinan di localStorage ini hanya cache untuk UI client.
  */
 
 export type SessionRole = 'student' | 'guru' | 'admin' | 'secretary';
@@ -48,6 +47,15 @@ export function clearSession(): void {
   } catch {
     // no-op
   }
+}
+
+/** Petakan role backend (ADMIN/GURU/SISWA/SEKRETARIS) ke role frontend. */
+export function roleFromBackend(role: string): SessionRole {
+  const r = role.toUpperCase();
+  if (r === 'ADMIN') return 'admin';
+  if (r === 'GURU') return 'guru';
+  if (r === 'SEKRETARIS' || r === 'SECRETARY') return 'secretary';
+  return 'student';
 }
 
 /** Determines which role a /dashboard/* path is meant for. */

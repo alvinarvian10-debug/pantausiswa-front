@@ -30,5 +30,3 @@ next-env.d.ts
 
 # vercel
 .vercel
-
-/lib/generated/prisma

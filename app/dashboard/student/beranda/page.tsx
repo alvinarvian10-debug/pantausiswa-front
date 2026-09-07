@@ -5,7 +5,19 @@ import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import {
+  apiMyIzin,
+  apiMyPeminjaman,
+  apiMyPresensi,
+  apiMyTugas,
+  type BackendIzin,
+  type BackendPeminjaman,
+  type BackendPresensi,
+  type BackendTugas,
+} from '../../../../lib/api';
 import { CURRENT_SISWA_ID, useAppData } from '../../../../lib/store';
+
+const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
 export default function StudentDashboard() {
   const { presensi, izin, tugas, submisi, peminjaman, getSiswa, getFasilitas } = useAppData();
@@ -26,24 +38,78 @@ export default function StudentDashboard() {
 
   const me = getSiswa(CURRENT_SISWA_ID);
   const today = new Date().toISOString().slice(0, 10);
-  const sudahHadir = presensi.some((p) => p.siswaId === CURRENT_SISWA_ID && p.tanggal === today);
+
+  // Ringkasan dari backend bila terjangkau, lokal bila tidak.
+  const [bePresensi, setBePresensi] = useState<BackendPresensi[] | null>(null);
+  const [beTugas, setBeTugas] = useState<BackendTugas[] | null>(null);
+  const [beIzin, setBeIzin] = useState<BackendIzin[] | null>(null);
+  const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
+
+  useEffect(() => {
+    apiMyPresensi().then((r) => setBePresensi(r.data)).catch(() => setBePresensi(null));
+    apiMyTugas().then(setBeTugas).catch(() => setBeTugas(null));
+    apiMyIzin().then((r) => setBeIzin(r.data)).catch(() => setBeIzin(null));
+    apiMyPeminjaman().then((r) => setBePinjam(r.data)).catch(() => setBePinjam(null));
+  }, []);
+
+  const sudahHadir = bePresensi !== null
+    ? bePresensi.some((p) => p.tanggal.slice(0, 10) === today)
+    : presensi.some((p) => p.siswaId === CURRENT_SISWA_ID && p.tanggal === today);
 
   const tugasAktif = useMemo(() => {
+    if (beTugas !== null) {
+      return beTugas
+        .filter((t) => !t.sudahMengumpulkan)
+        .slice(0, 2)
+        .map((t) => ({
+          key: `be-${t.id}`,
+          mapel: t.mapel?.nama ?? '-',
+          judul: t.judul,
+          deskripsi: t.deskripsi,
+          deadline: t.tenggat.slice(0, 10),
+        }));
+    }
     if (!me) return [];
     return tugas
       .filter((t) => t.kelasId === me.kelasId && !submisi.some((s) => s.tugasId === t.id && s.siswaId === CURRENT_SISWA_ID))
-      .slice(0, 2);
-  }, [tugas, submisi, me]);
+      .slice(0, 2)
+      .map((t) => ({ key: `lokal-${t.id}`, mapel: t.mapel, judul: t.judul, deskripsi: t.deskripsi, deadline: t.deadline }));
+  }, [beTugas, tugas, submisi, me]);
 
-  const latestIzin = useMemo(
-    () => izin.filter((i) => i.siswaId === CURRENT_SISWA_ID).sort((a, b) => new Date(b.diajukanPada).getTime() - new Date(a.diajukanPada).getTime())[0],
-    [izin],
-  );
+  const latestIzin = useMemo(() => {
+    if (beIzin !== null) {
+      const first = beIzin[0];
+      if (!first) return null;
+      return {
+        jenis: kapital(first.jenis),
+        tanggalMulai: first.tanggalMulai.slice(0, 10),
+        alasan: first.keterangan,
+        status: kapital(first.status),
+      };
+    }
+    return izin.filter((i) => i.siswaId === CURRENT_SISWA_ID).sort((a, b) => new Date(b.diajukanPada).getTime() - new Date(a.diajukanPada).getTime())[0] ?? null;
+  }, [beIzin, izin]);
 
-  const activeLoan = useMemo(
-    () => peminjaman.find((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam'),
-    [peminjaman],
-  );
+  const activeLoan = useMemo(() => {
+    if (bePinjam !== null) {
+      const loan = bePinjam.find((p) => p.status === 'DIPINJAM');
+      if (!loan) return null;
+      return {
+        icon: 'inventory_2',
+        nama: loan.barang?.nama ?? '-',
+        keperluan: loan.catatan ?? '',
+        batasLabel: loan.tanggalKembali.slice(0, 10),
+      };
+    }
+    const loan = peminjaman.find((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam');
+    if (!loan) return null;
+    return {
+      icon: getFasilitas(loan.fasilitasId)?.icon ?? 'inventory_2',
+      nama: getFasilitas(loan.fasilitasId)?.nama ?? '-',
+      keperluan: loan.keperluan,
+      batasLabel: `${loan.batasKembali.slice(11, 16)} WIB`,
+    };
+  }, [bePinjam, peminjaman, getFasilitas]);
 
   return (
     <main className="mx-auto flex w-full max-w-content flex-1 flex-col gap-6 p-4 sm:p-6 md:gap-8 md:p-8">
@@ -137,7 +203,7 @@ export default function StudentDashboard() {
             {tugasAktif.map((t) => {
               const terlambat = new Date(t.deadline) < new Date(today);
               return (
-                <li key={t.id}>
+                <li key={t.key}>
                   <Link
                     href="/dashboard/student/tugas"
                     className="group -mx-2 flex flex-col gap-1.5 rounded-xl px-2 py-3 transition-colors hover:bg-white/60"
@@ -229,12 +295,12 @@ export default function StudentDashboard() {
                   className="absolute -right-4 -top-4 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50"
                 >
                   <span className="material-symbols-outlined text-[36px] text-emerald-200">
-                    {getFasilitas(activeLoan.fasilitasId)?.icon ?? 'inventory_2'}
+                    {activeLoan.icon}
                   </span>
                 </div>
                 <div className="relative z-10">
                   <h5 className="mb-1 pr-10 text-sm font-semibold text-gray-900">
-                    {getFasilitas(activeLoan.fasilitasId)?.nama ?? '-'}
+                    {activeLoan.nama}
                   </h5>
                   <p className="mb-5 text-xs text-gray-500">{activeLoan.keperluan}</p>
                   <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white/90 px-4 py-3">
@@ -243,7 +309,7 @@ export default function StudentDashboard() {
                     </span>
                     <span className="flex items-center gap-1.5 text-sm font-bold text-red-500">
                       <span className="material-symbols-outlined icon-fill text-[16px]">schedule</span>
-                      {activeLoan.batasKembali.slice(11, 16)} WIB
+                      {activeLoan.batasLabel}
                     </span>
                   </div>
                 </div>

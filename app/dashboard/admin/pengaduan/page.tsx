@@ -1,15 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import { apiListAduan, apiUpdateAduan, toBackendStatusAduan, type BackendAduan } from '../../../../lib/api';
 import { Aduan, useAppData } from '../../../../lib/store';
 
 const STATUS_STYLE: Record<string, string> = {
   Baru: 'bg-blue-50 text-blue-700 ring-blue-100',
   Proses: 'bg-amber-50 text-amber-700 ring-amber-100',
   Selesai: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  Ditolak: 'bg-red-50 text-red-600 ring-red-100',
 };
 
 const FILTERS = ['Semua', 'Fasilitas', 'Keluhan'] as const;
@@ -17,93 +19,115 @@ const FILTERS = ['Semua', 'Fasilitas', 'Keluhan'] as const;
 export default function LaporanAduanPage() {
   const { aduan, getSiswa, getFasilitas, siklusStatusAduan, tanggapiAduan } = useAppData();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('Semua');
-  const [responTarget, setResponTarget] = useState<Aduan | null>(null);
+  const [responTarget, setResponTarget] = useState<BarisAduan | null>(null);
   const [tanggapan, setTanggapan] = useState('');
   const [dbNotice, setDbNotice] = useState('');
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // PATCH ke DB; kalau id lokal lama tidak ada di DB (404), buatkan barisnya via POST.
-  const syncKeDB = async (a: Aduan, patch: { status?: string; tanggapan?: string }) => {
-    const resPatch = await fetch(`/api/complaints/${a.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    if (resPatch.ok) return;
-    const errBody = await resPatch.json().catch(() => null);
-    if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
-      // Data lama (id lokal AD-xx) belum ada di DB. Cari baris yang cocok
-      // berdasarkan judul+deskripsi dulu agar tidak jadi duplikat.
-      try {
-        const listRes = await fetch('/api/complaints');
-        if (listRes.ok) {
-          const list = await listRes.json();
-          const match = Array.isArray(list)
-            ? list.find(
-                (r: { title?: string; description?: string }) =>
-                  r.title === a.judul && r.description === a.deskripsi,
-              )
-            : null;
-          if (match?.id) {
-            const resRetry = await fetch(`/api/complaints/${match.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(patch),
-            });
-            if (resRetry.ok) return;
-          }
-        }
-      } catch {
-        // lanjut ke POST di bawah
-      }
-      const resPost = await fetch('/api/complaints', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          judul: a.judul,
-          deskripsi: a.deskripsi,
-          jenis: a.jenis,
-          siswaId: a.siswaId,
-          fasilitasId: a.fasilitasId,
-          lampiranNama: a.lampiranNama,
-          isAnonim: a.isAnonim,
-        }),
-      });
-      if (!resPost.ok) {
-        const postErr = await resPost.json().catch(() => null);
-        throw new Error(postErr?.error ?? 'Gagal membuat baris DB.');
-      }
-      const saved = await resPost.json().catch(() => null);
-      // Setelah baris dibuat (id baru), terapkan patch-nya.
-      if (saved?.id) {
-        const resPatch2 = await fetch(`/api/complaints/${saved.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-        if (!resPatch2.ok) throw new Error('Gagal update baris DB yang baru dibuat.');
-      }
-      return;
+  // Sumber kebenaran: backend bila terjangkau, lokal bila tidak.
+  const [beAduan, setBeAduan] = useState<BackendAduan[] | null>(null);
+
+  const muatBackend = async () => {
+    try {
+      const res = await apiListAduan();
+      setBeAduan(res.data);
+    } catch {
+      setBeAduan(null);
     }
-    throw new Error(errBody?.error ?? 'Gagal update database.');
+  };
+
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  interface BarisAduan {
+    key: string;
+    backendId: number | null;
+    lokal?: Aduan;
+    namaPelapor: string;
+    anonim: boolean;
+    subPelapor: string;
+    jenis: 'Fasilitas' | 'Keluhan';
+    judul: string;
+    deskripsi: string;
+    fasilitasNama: string | null;
+    status: string;
+    tanggapan: string | null;
+  }
+
+  const barisSemua: BarisAduan[] = useMemo(() => {
+    if (beAduan !== null) {
+      const keDepan: Record<string, string> = {
+        BARU: 'Baru',
+        DIPROSES: 'Proses',
+        SELESAI: 'Selesai',
+        DITOLAK: 'Ditolak',
+      };
+      return beAduan.map((a) => ({
+        key: `be-${a.id}`,
+        backendId: a.id,
+        // Backend menyamarkan nama bila anonim (pelapor null).
+        namaPelapor: a.pelapor?.nama ?? 'Anonim',
+        anonim: a.isAnonim,
+        subPelapor: `${a.pelapor?.nama ?? 'Anonim'} · ${(a.createdAt ?? '').slice(0, 10)}`,
+        jenis: (a.kategori === 'FASILITAS' ? 'Fasilitas' : 'Keluhan') as 'Fasilitas' | 'Keluhan',
+        judul: a.judul,
+        deskripsi: a.deskripsi,
+        fasilitasNama: null,
+        status: keDepan[a.status] ?? a.status,
+        tanggapan: a.tanggapan,
+      }));
+    }
+    return aduan.map((a) => {
+      const pelapor = a.isAnonim ? 'Anonim' : (getSiswa(a.siswaId)?.nama ?? '-');
+      return {
+        key: `lokal-${a.id}`,
+        backendId: Number.isInteger(Number(a.id)) ? Number(a.id) : null,
+        lokal: a,
+        namaPelapor: pelapor,
+        anonim: a.isAnonim,
+        subPelapor: `Oleh ${pelapor} · ${a.tanggal}`,
+        jenis: a.jenis,
+        judul: a.judul,
+        deskripsi: a.deskripsi,
+        fasilitasNama: a.fasilitasId ? (getFasilitas(a.fasilitasId)?.nama ?? null) : null,
+        status: a.status,
+        tanggapan: a.tanggapan,
+      };
+    });
+  }, [beAduan, aduan, getSiswa, getFasilitas]);
+
+  // PATCH ke backend: PATCH /aduan/:id (admin). Id lokal lama (AD-xx)
+  // belum ada di backend — lokal tetap diupdate, pesan menjelaskan.
+  const syncKeDB = async (a: Aduan, patch: { status?: string; tanggapan?: string }) => {
+    const numericId = Number(a.id);
+    if (!Number.isInteger(numericId)) {
+      throw new Error(
+        'Data lokal lama belum ada di backend (id non-numerik). Minta pelapor buat ulang.',
+      );
+    }
+    await apiUpdateAduan(numericId, {
+      ...(patch.status ? { status: toBackendStatusAduan(patch.status) } : {}),
+      ...(patch.tanggapan ? { tanggapan: patch.tanggapan } : {}),
+    });
   };
 
   const visible = useMemo(() => {
-    if (filter === 'Semua') return aduan;
-    return aduan.filter((a) => a.jenis === filter);
-  }, [aduan, filter]);
+    if (filter === 'Semua') return barisSemua;
+    return barisSemua.filter((a) => a.jenis === filter);
+  }, [barisSemua, filter]);
 
   const stats = useMemo(() => {
-    const baru = aduan.filter((a) => a.status === 'Baru').length;
-    const proses = aduan.filter((a) => a.status === 'Proses').length;
-    const selesai = aduan.filter((a) => a.status === 'Selesai').length;
+    const baru = barisSemua.filter((a) => a.status === 'Baru').length;
+    const proses = barisSemua.filter((a) => a.status === 'Proses').length;
+    const selesai = barisSemua.filter((a) => a.status === 'Selesai').length;
     return [
       { label: 'Aduan Baru', count: baru, chip: 'bg-blue-50 text-blue-600 ring-blue-100', icon: 'markunread' },
       { label: 'Dalam Proses', count: proses, chip: 'bg-amber-50 text-amber-600 ring-amber-100', icon: 'hourglass_top' },
       { label: 'Selesai', count: selesai, chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100', icon: 'task_alt' },
     ];
-  }, [aduan]);
+  }, [barisSemua]);
 
   const handleRespon = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,15 +137,33 @@ export default function LaporanAduanPage() {
     setSaving(true);
     setDbError('');
     setDbNotice('');
-    tanggapiAduan(target.id, teks);
+    if (target.backendId !== null) {
+      try {
+        await apiUpdateAduan(target.backendId, { tanggapan: teks });
+        await muatBackend();
+        setDbNotice('Tanggapan tersimpan di backend.');
+      } catch (err) {
+        setDbError(
+          err instanceof Error
+            ? `Gagal masuk backend: ${err.message}`
+            : 'Gagal masuk backend.',
+        );
+      } finally {
+        setSaving(false);
+        setResponTarget(null);
+        setTanggapan('');
+      }
+      return;
+    }
+    tanggapiAduan(target.lokal!.id, teks);
     try {
-      await syncKeDB(target, { tanggapan: teks });
-      setDbNotice('Tanggapan tersimpan di database XAMPP.');
+      await syncKeDB(target.lokal!, { tanggapan: teks });
+      setDbNotice('Tanggapan tersimpan di backend.');
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Tersimpan lokal, tapi gagal masuk database: ${err.message}`
-          : 'Tersimpan lokal, tapi gagal masuk database.',
+          ? `Tersimpan lokal, tapi gagal masuk backend: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk backend.',
       );
     } finally {
       setSaving(false);
@@ -130,20 +172,45 @@ export default function LaporanAduanPage() {
     }
   };
 
-  const handleStatusMaju = async (a: Aduan) => {
+  const STATUS_BE: Record<string, string> = {
+    Baru: 'BARU',
+    Proses: 'DIPROSES',
+    Selesai: 'SELESAI',
+  };
+
+  const handleStatusMaju = async (a: BarisAduan) => {
     if (saving) return;
-    const next = a.status === 'Baru' ? 'Proses' : a.status === 'Proses' ? 'Selesai' : 'Selesai';
-    siklusStatusAduan(a.id);
+    const next = a.status === 'Baru' ? 'Proses' : 'Selesai';
+    if (a.backendId !== null) {
+      setSaving(true);
+      setDbError('');
+      setDbNotice('');
+      try {
+        await apiUpdateAduan(a.backendId, { status: STATUS_BE[next] ?? next });
+        await muatBackend();
+        setDbNotice(`Status "${a.judul}" → ${next}, tersimpan di backend.`);
+      } catch (err) {
+        setDbError(
+          err instanceof Error
+            ? `Gagal masuk backend: ${err.message}`
+            : 'Gagal masuk backend.',
+        );
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    siklusStatusAduan(a.lokal!.id);
     setDbError('');
     setDbNotice('');
     try {
-      await syncKeDB(a, { status: next });
-      setDbNotice(`Status "${a.judul}" → ${next}, tersimpan di database.`);
+      await syncKeDB(a.lokal!, { status: next });
+      setDbNotice(`Status "${a.judul}" → ${next}, tersimpan di backend.`);
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Status lokal berubah, tapi gagal masuk database: ${err.message}`
-          : 'Status lokal berubah, tapi gagal masuk database.',
+          ? `Status lokal berubah, tapi gagal masuk backend: ${err.message}`
+          : 'Status lokal berubah, tapi gagal masuk backend.',
       );
     }
   };
@@ -206,15 +273,19 @@ export default function LaporanAduanPage() {
 
       <StaggerGroup key={filter} as="div" className="flex flex-col gap-4">
         {visible.map((a) => {
-          const pelapor = a.isAnonim ? 'Anonim' : getSiswa(a.siswaId)?.nama ?? '-';
-          const fasilitasTerkait = a.fasilitasId ? getFasilitas(a.fasilitasId)?.nama : null;
           return (
-            <GlassCard key={a.id} className="p-6">
+            <GlassCard key={a.key} className="p-6">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-100">
                   {a.jenis === 'Fasilitas' ? 'Fasilitas Rusak' : 'Keluh Kesah'}
                 </span>
-                <span className="text-xs text-gray-400">Oleh {pelapor} · {a.tanggal}</span>
+                {a.anonim && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-200">
+                    <span className="material-symbols-outlined icon-fill text-[14px]">visibility_off</span>
+                    Anonim
+                  </span>
+                )}
+                <span className="text-xs text-gray-400">{a.subPelapor}</span>
                 <button
                   type="button"
                   onClick={() => handleStatusMaju(a)}
@@ -227,8 +298,8 @@ export default function LaporanAduanPage() {
                 </button>
               </div>
               <h3 className="text-base font-semibold text-gray-900">{a.judul}</h3>
-              {fasilitasTerkait && (
-                <p className="mt-0.5 text-xs font-medium text-blue-600">Fasilitas: {fasilitasTerkait}</p>
+              {a.fasilitasNama && (
+                <p className="mt-0.5 text-xs font-medium text-blue-600">Fasilitas: {a.fasilitasNama}</p>
               )}
               <p className="mt-1 text-sm leading-relaxed text-gray-500">{a.deskripsi}</p>
 

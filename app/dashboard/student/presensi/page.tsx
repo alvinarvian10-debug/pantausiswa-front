@@ -1,13 +1,31 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import {
+  apiCheckIn,
+  apiCreateIzin,
+  apiMyIzin,
+  apiMyPresensi,
+  type BackendIzin,
+  type BackendPresensi,
+} from '../../../../lib/api';
 import { CURRENT_SISWA_ID, JenisIzin, useAppData } from '../../../../lib/store';
+
+const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+const tanggalSaja = (iso: string) => iso.slice(0, 10);
+function jamSaja(iso: string | null): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
 
 const STATUS_BADGE: Record<string, string> = {
   Hadir: 'bg-emerald-100 text-emerald-700',
+  Terlambat: 'bg-orange-100 text-orange-700',
   Sakit: 'bg-amber-100 text-amber-700',
   Izin: 'bg-blue-100 text-blue-700',
   Alpa: 'bg-red-100 text-red-700',
@@ -37,26 +55,73 @@ export default function PresensiPage() {
   const me = getSiswa(CURRENT_SISWA_ID);
   const today = new Date().toISOString().slice(0, 10);
 
-  const myPresensi = useMemo(
+  // Sumber kebenaran: backend bila terjangkau, lokal bila tidak.
+  const [bePresensi, setBePresensi] = useState<BackendPresensi[] | null>(null);
+  const [beIzin, setBeIzin] = useState<BackendIzin[] | null>(null);
+
+  const muatBackend = async () => {
+    try {
+      const [p, z] = await Promise.all([apiMyPresensi(), apiMyIzin()]);
+      setBePresensi(p.data);
+      setBeIzin(z.data);
+    } catch {
+      setBePresensi(null);
+      setBeIzin(null);
+    }
+  };
+
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  const myPresensiLokal = useMemo(
     () => presensi.filter((p) => p.siswaId === CURRENT_SISWA_ID),
     [presensi],
   );
-  const myIzin = useMemo(
+  const myIzinLokal = useMemo(
     () => izin.filter((i) => i.siswaId === CURRENT_SISWA_ID),
     [izin],
+  );
+
+  // Samakan bentuk backend ke bentuk tampilan (fallback = data lokal).
+  const myPresensi = useMemo(
+    () =>
+      bePresensi !== null
+        ? bePresensi.map((p) => ({
+            id: String(p.id),
+            tanggal: tanggalSaja(p.tanggal),
+            waktu: jamSaja(p.checkInAt),
+            status: kapital(p.status),
+            keterangan: p.catatan ?? '',
+          }))
+        : myPresensiLokal,
+    [bePresensi, myPresensiLokal],
+  );
+  const myIzin = useMemo(
+    () =>
+      beIzin !== null
+        ? beIzin.map((i) => ({
+            id: String(i.id),
+            jenis: kapital(i.jenis),
+            tanggalMulai: tanggalSaja(i.tanggalMulai),
+            tanggalSelesai: tanggalSaja(i.tanggalSelesai),
+            alasan: i.keterangan,
+            status: kapital(i.status),
+            alasanTolak: i.catatanReview,
+          }))
+        : myIzinLokal,
+    [beIzin, myIzinLokal],
   );
   const alreadyCheckedIn = myPresensi.some((p) => p.tanggal === today);
 
   const kpi = useMemo(() => {
-    const hadir = myPresensi.filter((p) => p.status === 'Hadir').length;
-    const sakit = myPresensi.filter((p) => p.status === 'Sakit').length;
-    const izinCount = myPresensi.filter((p) => p.status === 'Izin').length;
-    const alpa = myPresensi.filter((p) => p.status === 'Alpa').length;
+    const hitung = (s: string) => myPresensi.filter((p) => p.status === s).length;
     return [
-      { icon: 'person_check', count: hadir, label: 'Hadir', chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
-      { icon: 'sick', count: sakit, label: 'Sakit', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
-      { icon: 'description', count: izinCount, label: 'Izin', chip: 'bg-blue-50 text-blue-600 ring-blue-100' },
-      { icon: 'cancel', count: alpa, label: 'Tanpa Keterangan', chip: 'bg-red-50 text-red-600 ring-red-100' },
+      { icon: 'person_check', count: hitung('Hadir'), label: 'Hadir', chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
+      { icon: 'schedule', count: hitung('Terlambat'), label: 'Terlambat', chip: 'bg-orange-50 text-orange-600 ring-orange-100' },
+      { icon: 'sick', count: hitung('Sakit'), label: 'Sakit', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
+      { icon: 'description', count: hitung('Izin'), label: 'Izin', chip: 'bg-blue-50 text-blue-600 ring-blue-100' },
+      { icon: 'cancel', count: hitung('Alpa'), label: 'Tanpa Keterangan', chip: 'bg-red-50 text-red-600 ring-red-100' },
     ];
   }, [myPresensi]);
 
@@ -85,29 +150,26 @@ export default function PresensiPage() {
       alasan: form.alasan.trim(),
       lampiranNama: form.lampiranNama,
     };
-    // 1) Simpan ke MySQL via API — pakai id DB sebagai id lokal agar PATCH guru cocok.
+    // 1) Simpan ke backend NestJS — identitas siswa diambil dari JWT, bukan dari body.
     let dbId: string | undefined;
     try {
-      const res = await fetch('/api/izin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const saved = await apiCreateIzin({
+        jenis: form.jenis,
+        tanggalMulai: form.tanggalMulai,
+        tanggalSelesai: form.tanggalSelesai,
+        keterangan: form.alasan.trim(),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
-      }
-      const saved = await res.json().catch(() => null);
-      if (saved?.id) dbId = String(saved.id);
+      if (saved?.id != null) dbId = String(saved.id);
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Tersimpan lokal, tapi gagal masuk database XAMPP: ${err.message}`
-          : 'Tersimpan lokal, tapi gagal masuk database XAMPP.',
+          ? `Tersimpan lokal, tapi gagal masuk backend: ${err.message}`
+          : 'Tersimpan lokal, tapi gagal masuk backend.',
       );
     }
     // 2) Simpan lokal agar UI langsung update.
     ajukanIzin(dbId ? { ...payload, id: dbId } : payload);
+    await muatBackend();
     setSubmitting(false);
     setOpenForm(false);
     setSuccess(true);
@@ -124,29 +186,16 @@ export default function PresensiPage() {
   const handleCheckIn = async () => {
     setDbError('');
     try {
-      const res = await fetch('/api/presensi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siswaId: CURRENT_SISWA_ID,
-          tanggal: today,
-          waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          status: 'Hadir',
-          keterangan: 'Presensi via check-in mandiri',
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
-      }
+      await apiCheckIn('Presensi via check-in mandiri');
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Check-in lokal tercatat, tapi gagal masuk database: ${err.message}`
-          : 'Check-in lokal tercatat, tapi gagal masuk database.',
+          ? `Check-in lokal tercatat, tapi gagal masuk backend: ${err.message}`
+          : 'Check-in lokal tercatat, tapi gagal masuk backend.',
       );
     }
     checkIn(CURRENT_SISWA_ID);
+    await muatBackend();
   };
 
   return (
@@ -167,7 +216,7 @@ export default function PresensiPage() {
       <StaggerGroup
         as="div"
         aria-label="Ringkasan kehadiran"
-        className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5"
       >
         {kpi.map((k) => (
           <GlassCard key={k.label} className="flex items-center gap-4 p-6">

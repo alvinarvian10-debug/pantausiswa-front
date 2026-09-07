@@ -1,9 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import {
+  apiCreatePeminjaman,
+  apiKembalikanMandiri,
+  apiListBarang,
+  apiMyPeminjaman,
+  type BackendBarang,
+  type BackendPeminjaman,
+} from '../../../../lib/api';
 import { CURRENT_SISWA_ID, Fasilitas, useAppData } from '../../../../lib/store';
 
 const CATEGORIES = ['Semua', 'Ruangan', 'Elektronik', 'Olahraga'] as const;
@@ -24,102 +32,190 @@ export default function PeminjamanPage() {
   const { fasilitas, peminjaman, getFasilitas, ajukanPeminjaman, kembalikanPeminjaman } = useAppData();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('Semua');
-  const [pickedFasilitas, setPickedFasilitas] = useState<Fasilitas | null>(null);
+  const [pickedFasilitas, setPickedFasilitas] = useState<FasilitasView | null>(null);
   const [keperluan, setKeperluan] = useState('');
   const [jamKembali, setJamKembali] = useState('16:00');
   const [dbNotice, setDbNotice] = useState('');
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const myLoans = useMemo(
-    () => peminjaman.filter((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam'),
-    [peminjaman],
-  );
+  // Sumber kebenaran: backend bila terjangkau (stok + riwayat), lokal bila tidak.
+  const [beBarang, setBeBarang] = useState<BackendBarang[] | null>(null);
+  const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
+
+  const muatBackend = async () => {
+    try {
+      const [b, p] = await Promise.all([apiListBarang(), apiMyPeminjaman()]);
+      setBeBarang(b);
+      setBePinjam(p.data);
+    } catch {
+      setBeBarang(null);
+      setBePinjam(null);
+    }
+  };
+
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  interface FasilitasView {
+    key: string;
+    backendId: number | null;
+    nama: string;
+    kategori: string;
+    icon: string;
+    jumlahTotal: number;
+    jumlahTersedia: number;
+    kondisi: 'Baik' | 'Rusak' | 'Diperbaiki';
+  }
+
+  const daftarFasilitas: FasilitasView[] = useMemo(() => {
+    if (beBarang !== null) {
+      return beBarang.map((b) => ({
+        key: `be-${b.id}`,
+        backendId: b.id,
+        nama: b.nama,
+        kategori: b.kategori,
+        icon: b.icon ?? 'inventory_2',
+        jumlahTotal: b.jumlahTotal,
+        jumlahTersedia: b.jumlahTersedia,
+        kondisi: b.kondisi === 'BAIK' ? 'Baik' : 'Rusak',
+      }));
+    }
+    return fasilitas.map((f) => ({
+      key: `lokal-${f.id}`,
+      backendId: Number.isInteger(Number(f.id)) ? Number(f.id) : null,
+      nama: f.nama,
+      kategori: f.kategori,
+      icon: f.icon,
+      jumlahTotal: f.jumlahTotal,
+      jumlahTersedia: f.jumlahTersedia,
+      kondisi: f.kondisi,
+    }));
+  }, [beBarang, fasilitas]);
+
+  interface PinjamanView {
+    key: string;
+    backendId: number | null;
+    nama: string;
+    icon: string;
+    keperluan: string;
+    batasLabel: string;
+    loanIdLokal: string | null;
+  }
+
+  const myLoans: PinjamanView[] = useMemo(() => {
+    if (bePinjam !== null) {
+      return bePinjam
+        .filter((p) => p.status === 'DIPINJAM')
+        .map((p) => ({
+          key: `be-${p.id}`,
+          backendId: p.id,
+          nama: p.barang?.nama ?? '-',
+          icon: p.barang?.icon ?? 'inventory_2',
+          keperluan: p.catatan ?? '',
+          batasLabel: `Kembali: ${p.tanggalKembali.slice(0, 10)}`,
+          loanIdLokal: null,
+        }));
+    }
+    return peminjaman
+      .filter((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam')
+      .map((p) => {
+        const f = getFasilitas(p.fasilitasId);
+        return {
+          key: `lokal-${p.id}`,
+          backendId: null,
+          nama: f?.nama ?? '-',
+          icon: f?.icon ?? 'inventory_2',
+          keperluan: p.keperluan,
+          batasLabel: `Batas: ${p.batasKembali.slice(11, 16)} WIB`,
+          loanIdLokal: p.id,
+        };
+      });
+  }, [bePinjam, peminjaman, getFasilitas]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return fasilitas.filter((f) => {
+    return daftarFasilitas.filter((f) => {
       const matchCat = category === 'Semua' || f.kategori === category;
       const matchQuery = !q || f.nama.toLowerCase().includes(q);
       return matchCat && matchQuery;
     });
-  }, [fasilitas, query, category]);
+  }, [daftarFasilitas, query, category]);
 
   const handleAjukan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pickedFasilitas || !keperluan.trim() || saving) return;
     const fasilitasDipilih = pickedFasilitas;
     const today = new Date().toISOString().slice(0, 10);
-    const payload = {
-      siswaId: CURRENT_SISWA_ID,
-      fasilitasId: fasilitasDipilih.id,
-      keperluan: keperluan.trim(),
-      batasKembali: `${today}T${jamKembali}:00`,
-    };
     setSaving(true);
     setDbError('');
     setDbNotice('');
-    // Stok adalah kebenaran DB: POST dulu (transaksi atomik di server).
-    // Gagal (stok habis/rusak) → jangan buat lokal agar angka tidak ngaco.
+    // Stok adalah kebenaran backend: POST dulu (stok berkurang saat admin
+    // APPROVE). Baris backend bawa id numerik; baris lokal dicocokkan nama.
     try {
-      const res = await fetch('/api/peminjaman', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          fasilitasNama: fasilitasDipilih.nama,
-          kategori: fasilitasDipilih.kategori,
-          icon: fasilitasDipilih.icon,
-          jumlahTotal: fasilitasDipilih.jumlahTotal,
-          tanggalPinjam: today,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
+      let barangId = fasilitasDipilih.backendId;
+      if (barangId === null) {
+        const daftar = await apiListBarang();
+        const match = daftar.find(
+          (b) => b.nama.toLowerCase() === fasilitasDipilih.nama.trim().toLowerCase(),
+        );
+        if (!match) {
+          throw new Error(
+            `Fasilitas "${fasilitasDipilih.nama}" belum ada di backend.`,
+          );
+        }
+        barangId = match.id;
       }
-      const saved = await res.json().catch(() => null);
-      ajukanPeminjaman({ ...payload, ...(saved?.id ? { id: String(saved.id) } : {}) });
-      setDbNotice(`Peminjaman "${fasilitasDipilih.nama}" tercatat di database. Stok berkurang 1.`);
+      await apiCreatePeminjaman({
+        barangId,
+        tanggalKembali: today,
+        catatan: `${keperluan.trim()} (batas ${jamKembali} WIB)`,
+      });
+      // Cache lokal hanya untuk baris lokal (baris backend tak ada di store).
+      const asalLokal = fasilitas.find((f) => `lokal-${f.id}` === fasilitasDipilih.key);
+      if (asalLokal) {
+        ajukanPeminjaman({
+          siswaId: CURRENT_SISWA_ID,
+          fasilitasId: asalLokal.id,
+          keperluan: keperluan.trim(),
+          batasKembali: `${today}T${jamKembali}:00`,
+        });
+      }
+      await muatBackend();
+      setDbNotice(`Pengajuan "${fasilitasDipilih.nama}" tercatat di backend (menunggu persetujuan admin).`);
       setPickedFasilitas(null);
       setKeperluan('');
     } catch (err) {
       setDbError(
-        err instanceof Error ? err.message : 'Gagal menyimpan ke database.',
+        err instanceof Error ? err.message : 'Gagal menyimpan ke backend.',
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const handleKembali = async (loanId: string) => {
+  const handleKembali = async (loan: PinjamanView) => {
     setDbError('');
     setDbNotice('');
-    try {
-      const res = await fetch(`/api/peminjaman/${loanId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Dikembalikan' }),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => null);
-        if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-          // Data lama lokal (PJ-xx) belum ada di DB — cukup kembalikan lokal.
-          setDbNotice('Pengembalian tercatat lokal (data lama belum ada di database).');
-        } else {
-          throw new Error(errBody?.error ?? 'Gagal update database.');
-        }
-      } else {
-        setDbNotice('Pengembalian tercatat di database. Stok bertambah 1.');
+    // Baris backend: kembalikan via backend (stok pulih, tercatat DIKEMBALIKAN).
+    if (loan.backendId !== null) {
+      try {
+        await apiKembalikanMandiri(loan.backendId);
+        await muatBackend();
+        setDbNotice('Pengembalian tercatat di backend. Terima kasih!');
+      } catch (err) {
+        setDbError(
+          err instanceof Error
+            ? `Gagal masuk backend: ${err.message}`
+            : 'Gagal masuk backend.',
+        );
       }
-    } catch (err) {
-      setDbError(
-        err instanceof Error
-          ? `Lokal dikembalikan, tapi gagal masuk database: ${err.message}`
-          : 'Lokal dikembalikan, tapi gagal masuk database.',
-      );
+      return;
     }
-    kembalikanPeminjaman(loanId);
+    // Fallback lokal (konfirmasi admin kemudian di backend).
+    if (loan.loanIdLokal) kembalikanPeminjaman(loan.loanIdLokal);
+    setDbNotice('Pengembalian tercatat. Admin mengonfirmasi di backend.');
   };
 
   return (
@@ -154,29 +250,28 @@ export default function PeminjamanPage() {
         <ScrollReveal delay={0.05}>
           <section className="flex flex-col gap-3">
             {myLoans.map((loan) => {
-              const f = getFasilitas(loan.fasilitasId);
               return (
                 <GlassCard
-                  key={loan.id}
+                  key={loan.key}
                   className="flex flex-col gap-4 border border-emerald-200 bg-emerald-50/50 p-5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex items-center gap-4">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 ring-1 ring-inset ring-emerald-100">
-                      <span className="material-symbols-outlined icon-fill text-[26px]">{f?.icon ?? 'inventory_2'}</span>
+                      <span className="material-symbols-outlined icon-fill text-[26px]">{loan.icon}</span>
                     </span>
                     <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-gray-900">Sedang Dipinjam: {f?.nama ?? '-'}</span>
+                      <span className="text-sm font-semibold text-gray-900">Sedang Dipinjam: {loan.nama}</span>
                       <span className="text-xs font-medium text-gray-500">{loan.keperluan}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-gray-900 ring-1 ring-inset ring-emerald-100">
                       <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-600">schedule</span>
-                      Batas: {loan.batasKembali.slice(11, 16)} WIB
+                      {loan.batasLabel}
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleKembali(loan.id)}
+                      onClick={() => handleKembali(loan)}
                       className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100"
                     >
                       Kembalikan
@@ -226,7 +321,7 @@ export default function PeminjamanPage() {
           const habis = f.jumlahTersedia < 1;
           return (
             <GlassCard
-              key={f.id}
+              key={f.key}
               className="flex h-full flex-col items-center gap-4 p-6 text-center transition-transform duration-300 hover:-translate-y-1"
             >
               <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100">

@@ -2,31 +2,64 @@
 
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../components/GlassCard';
 import Avatar from '../../../components/Avatar';
 import ScrollReveal from '../../../components/ScrollReveal';
 import StaggerGroup from '../../../components/StaggerGroup';
 import AnimatedCounter from '../../../components/AnimatedCounter';
+import {
+  apiListAduan,
+  apiListPeminjaman,
+  apiRingkasan,
+  type BackendAduan,
+  type BackendPeminjaman,
+  type BackendRingkasan,
+} from '../../../lib/api';
 import { useAppData } from '../../../lib/store';
 
 const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
 
+const STATUS_ADUAN_KE_DEPAN: Record<string, string> = {
+  BARU: 'Baru',
+  DIPROSES: 'Proses',
+  SELESAI: 'Selesai',
+  DITOLAK: 'Ditolak',
+};
+
 export default function AdminDashboard() {
   const { siswa, presensi, peminjaman, aduan, getSiswa, getFasilitas } = useAppData();
 
+  // Ringkasan dari backend bila terjangkau, lokal bila tidak.
+  const [beRingkasan, setBeRingkasan] = useState<BackendRingkasan | null>(null);
+  const [beAduan, setBeAduan] = useState<BackendAduan[] | null>(null);
+  const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
+
+  useEffect(() => {
+    apiRingkasan().then(setBeRingkasan).catch(() => setBeRingkasan(null));
+    apiListAduan().then((r) => setBeAduan(r.data)).catch(() => setBeAduan(null));
+    apiListPeminjaman('DIPINJAM')
+      .then((r) => setBePinjam(r.data))
+      .catch(() => setBePinjam(null));
+  }, []);
+
   const today = new Date().toISOString().slice(0, 10);
   const todayPresensi = presensi.filter((p) => p.tanggal === today);
-  const kehadiranPersen = todayPresensi.length > 0
+  const kehadiranPersenLokal = todayPresensi.length > 0
     ? Math.round((todayPresensi.filter((p) => p.status === 'Hadir').length / todayPresensi.length) * 100)
     : 0;
-  const fasilitasDipinjam = peminjaman.filter((p) => p.status === 'Dipinjam').length;
-  const aduanTerbuka = aduan.filter((a) => a.status !== 'Selesai').length;
+
+  const siswaAktif = beRingkasan?.totalSiswa ?? siswa.length;
+  const kehadiranPersen = beRingkasan?.kehadiranHariIni.persentase ?? kehadiranPersenLokal;
+  const fasilitasDipinjam = bePinjam?.length ?? peminjaman.filter((p) => p.status === 'Dipinjam').length;
+  const aduanTerbuka = beAduan
+    ? beAduan.filter((a) => a.status !== 'SELESAI').length
+    : aduan.filter((a) => a.status !== 'Selesai').length;
 
   const STATS = [
     {
       label: 'Siswa Aktif',
-      value: siswa.length,
+      value: siswaAktif,
       suffix: '',
       sub: 'Siswa Terdaftar',
       icon: 'school',
@@ -70,6 +103,69 @@ export default function AdminDashboard() {
       return { day, hadir, izin, alpa };
     });
   }, [kehadiranPersen]);
+
+  interface TiketView {
+    key: string;
+    judul: string;
+    pelapor: string;
+    status: string;
+  }
+
+  const tiketTerbaru: TiketView[] = useMemo(() => {
+    if (beAduan !== null) {
+      return [...beAduan]
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 4)
+        .map((a) => ({
+          key: `be-${a.id}`,
+          judul: a.judul,
+          pelapor: a.pelapor?.nama ?? '-',
+          status: STATUS_ADUAN_KE_DEPAN[a.status] ?? a.status,
+        }));
+    }
+    return [...aduan]
+      .sort((a, b) => (a.id < b.id ? 1 : -1))
+      .slice(0, 4)
+      .map((a) => ({
+        key: `lokal-${a.id}`,
+        judul: a.judul,
+        pelapor: a.isAnonim ? 'Anonim' : (getSiswa(a.siswaId)?.nama ?? '-'),
+        status: a.status,
+      }));
+  }, [beAduan, aduan, getSiswa]);
+
+  interface PinjamView {
+    key: string;
+    nama: string;
+    barang: string;
+    pinjam: string;
+    batas: string;
+    terlambat: boolean;
+  }
+
+  const pinjamanBerjalan: PinjamView[] = useMemo(() => {
+    if (bePinjam !== null) {
+      const now = new Date();
+      return bePinjam.map((p) => ({
+        key: `be-${p.id}`,
+        nama: p.siswa?.user?.nama ?? '-',
+        barang: p.barang?.nama ?? '-',
+        pinjam: p.tanggalPinjam.slice(0, 10),
+        batas: p.tanggalKembali.slice(0, 10),
+        terlambat: new Date(p.tanggalKembali) < now,
+      }));
+    }
+    return peminjaman
+      .filter((p) => p.status === 'Dipinjam')
+      .map((p) => ({
+        key: `lokal-${p.id}`,
+        nama: getSiswa(p.siswaId)?.nama ?? '-',
+        barang: getFasilitas(p.fasilitasId)?.nama ?? '-',
+        pinjam: p.tanggalPinjam,
+        batas: `${p.batasKembali.slice(11, 16)} WIB`,
+        terlambat: new Date(p.batasKembali) < new Date(),
+      }));
+  }, [bePinjam, peminjaman, getSiswa, getFasilitas]);
 
   return (
     <main className="mx-auto w-full max-w-content flex-1 p-4 sm:p-6 md:p-8">
@@ -131,11 +227,11 @@ export default function AdminDashboard() {
         {/* Analytics & Ticketing */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <TrendChart chart={CHART} />
-          <TicketList aduan={aduan} getSiswa={getSiswa} />
+          <TicketList tiket={tiketTerbaru} />
         </section>
 
         {/* Peminjaman Table */}
-        <BorrowTable peminjaman={peminjaman} getSiswa={getSiswa} getFasilitas={getFasilitas} />
+        <BorrowTable baris={pinjamanBerjalan} />
       </div>
     </main>
   );
@@ -244,18 +340,15 @@ const TICKET_STYLE: Record<string, { chip: string; dot: string }> = {
   Baru: { chip: 'bg-red-50 text-red-600 ring-red-100', dot: 'bg-red-500' },
   Proses: { chip: 'bg-amber-50 text-amber-600 ring-amber-100', dot: 'bg-amber-500' },
   Selesai: { chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100', dot: 'bg-emerald-500' },
+  Ditolak: { chip: 'bg-slate-100 text-slate-500 ring-slate-200', dot: 'bg-slate-400' },
 };
 
 function TicketList({
-  aduan,
-  getSiswa,
+  tiket,
 }: {
-  aduan: ReturnType<typeof useAppData>['aduan'];
-  getSiswa: ReturnType<typeof useAppData>['getSiswa'];
+  tiket: { key: string; judul: string; pelapor: string; status: string }[];
 }) {
-  const latest = [...aduan]
-    .sort((a, b) => (a.id < b.id ? 1 : -1))
-    .slice(0, 4);
+  const latest = tiket.slice(0, 4);
 
   return (
     <ScrollReveal delay={0.2} className="h-full">
@@ -280,10 +373,9 @@ function TicketList({
           role="list"
         >
           {latest.map((ticket) => {
-            const style = TICKET_STYLE[ticket.status];
-            const pelapor = ticket.isAnonim ? 'Anonim' : getSiswa(ticket.siswaId)?.nama ?? '-';
+            const style = TICKET_STYLE[ticket.status] ?? TICKET_STYLE.Baru;
             return (
-              <li key={ticket.id}>
+              <li key={ticket.key}>
                 <Link
                   href="/dashboard/admin/pengaduan"
                   className="flex items-start justify-between gap-4 rounded-xl border border-white/60 bg-white/60 p-4 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-emerald-200 hover:bg-white hover:shadow-glass"
@@ -296,7 +388,7 @@ function TicketList({
                       <span className="material-symbols-outlined text-[16px] text-gray-400">
                         person
                       </span>
-                      {pelapor}
+                      {ticket.pelapor}
                     </p>
                   </div>
                   <span
@@ -319,17 +411,17 @@ function TicketList({
 }
 
 function BorrowTable({
-  peminjaman,
-  getSiswa,
-  getFasilitas,
+  baris,
 }: {
-  peminjaman: ReturnType<typeof useAppData>['peminjaman'];
-  getSiswa: ReturnType<typeof useAppData>['getSiswa'];
-  getFasilitas: ReturnType<typeof useAppData>['getFasilitas'];
+  baris: {
+    key: string;
+    nama: string;
+    barang: string;
+    pinjam: string;
+    batas: string;
+    terlambat: boolean;
+  }[];
 }) {
-  const active = peminjaman.filter((p) => p.status === 'Dipinjam');
-  const isTerlambat = (batas: string) => new Date(batas) < new Date();
-
   return (
     <ScrollReveal delay={0.15}>
       <GlassCard className="overflow-hidden">
@@ -371,51 +463,48 @@ function BorrowTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {active.map((row) => {
-                const s = getSiswa(row.siswaId);
-                const f = getFasilitas(row.fasilitasId);
-                const terlambat = isTerlambat(row.batasKembali);
+              {baris.map((row) => {
                 return (
                   <tr
-                    key={row.id}
+                    key={row.key}
                     className="transition-colors hover:bg-slate-50/70"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <Avatar
-                          name={s?.nama ?? '?'}
-                          tone={s?.tone ?? 'slate'}
+                          name={row.nama}
+                          tone="slate"
                           className="h-9 w-9 text-xs"
                         />
                         <span className="text-sm font-medium text-gray-900">
-                          {s?.nama ?? '-'}
+                          {row.nama}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {f?.nama ?? '-'}
+                      {row.barang}
                     </td>
                     <td className="px-6 py-4 font-mono tabular-nums text-sm text-gray-500">
-                      {row.tanggalPinjam}
+                      {row.pinjam}
                     </td>
                     <td className="px-6 py-4 font-mono tabular-nums text-sm text-gray-500">
-                      {row.batasKembali.slice(11, 16)} WIB
+                      {row.batas}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span
                         className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${
-                          terlambat
+                          row.terlambat
                             ? 'bg-red-50 text-red-600 ring-red-100'
                             : 'bg-emerald-50 text-emerald-600 ring-emerald-100'
                         }`}
                       >
-                        {terlambat ? 'Terlambat' : 'Aman'}
+                        {row.terlambat ? 'Terlambat' : 'Aman'}
                       </span>
                     </td>
                   </tr>
                 );
               })}
-              {active.length === 0 && (
+              {baris.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">
                     Tidak ada peminjaman yang sedang berjalan.

@@ -1,78 +1,68 @@
-import bcrypt from 'bcryptjs';
-import { NextResponse } from 'next/server';
-import { prisma } from '../../../../lib/prisma';
-import { hrefForRole, SESSION_COOKIE, sessionCookieOptions, signSession } from '../../../../lib/session';
+import { NextResponse, type NextRequest } from 'next/server';
 
-const ROLES = ['admin', 'guru', 'student', 'secretary'] as const;
-const ROLE_LABEL: Record<string, string> = {
-  admin: 'Admin',
-  guru: 'Guru',
-  student: 'Siswa',
-  secretary: 'Sekretaris',
-};
+const BACKEND = process.env.BACKEND_INTERNAL_URL ?? 'http://localhost:4000/api';
+const SESSION_COOKIE = 'pantausiswa.session';
+const MAX_AGE = 60 * 60 * 24 * 7; // 7 hari
 
-// POST /api/auth/login — { identifier, password, role }
-// Kredensial dicek ke tabel User (bcrypt), peran harus cocok pilihan user.
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const identifier = String(body?.identifier ?? '').trim();
-  const password = String(body?.password ?? '');
-  const role = String(body?.role ?? '').trim();
+// Secure hanya bila request masuk via HTTPS (otomatis benar di localhost
+// HTTP maupun production HTTPS). Override paksa via COOKIE_SECURE=true/false.
+function cookieSecure(req: NextRequest): boolean {
+  const flag = process.env.COOKIE_SECURE;
+  if (flag === 'true') return true;
+  if (flag === 'false') return false;
+  const proto = req.headers.get('x-forwarded-proto');
+  if (proto) return proto.split(',')[0].trim() === 'https';
+  return req.nextUrl.protocol === 'https:';
+}
 
-  if (!identifier || !password) {
-    return NextResponse.json(
-      { error: 'Username dan password wajib diisi.' },
-      { status: 400 },
-    );
-  }
-  if (!role) {
-    return NextResponse.json(
-      { error: 'Silakan pilih peran login terlebih dahulu.' },
-      { status: 400 },
-    );
+function cookieOptions(req: NextRequest) {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge: MAX_AGE,
+    secure: cookieSecure(req),
+  };
+}
+
+// POST /api/auth/login { email, password } -> backend, token disimpan
+// sebagai cookie HttpOnly (JS tidak bisa baca) + kembalikan user.
+export async function POST(req: NextRequest) {
+  let body: unknown = null;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ message: 'Body tidak valid' }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { username: identifier } });
-  if (!user) {
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${BACKEND}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
     return NextResponse.json(
-      { error: 'Username tidak terdaftar. Periksa kembali username Anda.' },
-      { status: 401 },
-    );
-  }
-  if (user.role !== role) {
-    return NextResponse.json(
-      {
-        error: `Username tersebut terdaftar sebagai ${ROLE_LABEL[user.role] ?? 'yang sesuai'}. Pilih peran ${ROLE_LABEL[user.role] ?? 'yang sesuai'} untuk melanjutkan.`,
-      },
-      { status: 403 },
-    );
-  }
-  const cocok = await bcrypt.compare(password, user.passwordHash);
-  if (!cocok) {
-    return NextResponse.json(
-      { error: 'Password salah. Silakan periksa kembali password Anda.' },
-      { status: 401 },
+      { message: 'Backend tidak terjangkau. Pastikan service back jalan.' },
+      { status: 502 },
     );
   }
 
-  const token = await signSession({
-    sub: user.id,
-    username: user.username,
-    role: user.role as (typeof ROLES)[number],
-    displayName: user.displayName,
-    secretaryId: user.secretaryId,
-  });
+  const data = (await upstream.json().catch(() => null)) as {
+    accessToken?: string;
+    user?: unknown;
+    message?: string;
+  } | null;
 
-  const res = NextResponse.json({
-    ok: true,
-    href: hrefForRole(user.role as (typeof ROLES)[number]),
-    user: {
-      username: user.username,
-      role: user.role,
-      displayName: user.displayName,
-      secretaryId: user.secretaryId,
-    },
-  });
-  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
+  if (!upstream.ok || !data?.accessToken || !data?.user) {
+    return NextResponse.json(
+      { message: data?.message ?? 'Email atau password salah.' },
+      { status: upstream.status },
+    );
+  }
+
+  const res = NextResponse.json({ user: data.user });
+  res.cookies.set(SESSION_COOKIE, data.accessToken, cookieOptions(req));
   return res;
 }

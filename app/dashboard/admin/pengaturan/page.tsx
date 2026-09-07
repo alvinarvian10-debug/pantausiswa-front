@@ -1,45 +1,125 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
+import {
+  apiGetPengaturan,
+  apiListPasswordRequests,
+  apiReviewPasswordRequest,
+  apiUpdatePengaturan,
+  type BackendPasswordRequest,
+} from '../../../../lib/api';
 import { useAppData } from '../../../../lib/store';
 
 export default function PengaturanPage() {
-  const { pengaturan, updatePengaturan, permintaanPassword, sekretaris, getKelas, prosesGantiPassword } = useAppData();
+  const { pengaturan, updatePengaturan } = useAppData();
   const [form, setForm] = useState(pengaturan);
   const [saved, setSaved] = useState(false);
+  const [cfgError, setCfgError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [pwNotice, setPwNotice] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [requests, setRequests] = useState<BackendPasswordRequest[]>([]);
+  const [reviewing, setReviewing] = useState<number | null>(null);
 
-  // Setujui = update lokal + update hash password di database (sumber login).
-  const handleSetujuPassword = async (requestId: string, sekretarisId: string, passwordBaru: string, username: string) => {
-    prosesGantiPassword(requestId, 'Disetujui');
-    setPwNotice('');
-    try {
-      const res = await fetch('/api/auth/admin-set-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, newPassword: passwordBaru }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal update database.');
-      }
-      setPwNotice(`Password "${username}" berlaku baru di database.`);
-    } catch (err) {
-      setPwNotice(
-        err instanceof Error
-          ? `Lokal disetujui, tapi password DB gagal diubah: ${err.message}`
-          : 'Lokal disetujui, tapi password DB gagal diubah.',
+  // Profil + antrean persetujuan dimuat dari backend (sumber kebenaran).
+  useEffect(() => {
+    apiGetPengaturan()
+      .then((cfg) =>
+        setForm((f) => ({
+          ...f,
+          namaSekolah: cfg.namaSekolah,
+          npsn: cfg.npsn,
+          alamat: cfg.alamat ?? '',
+          tahunAjaran: cfg.tahunAjaran,
+          semester: (cfg.semester === 'Genap' ? 'Genap' : 'Ganjil') as 'Ganjil' | 'Genap',
+          kepalaSekolah: cfg.kepalaSekolah ?? '',
+          jamMasuk: cfg.jamMasuk,
+          batasToleransi: cfg.batasToleransi,
+          notifikasiWA: cfg.notifikasiWA,
+          notifikasiEmail: cfg.notifikasiEmail,
+        })),
+      )
+      .catch((err: unknown) =>
+        setCfgError(
+          err instanceof Error
+            ? `Profil dari backend gagal dimuat: ${err.message}`
+            : 'Profil dari backend gagal dimuat.',
+        ),
       );
+    apiListPasswordRequests('MENUNGGU')
+      .then(setRequests)
+      .catch(() => setRequests([]));
+  }, []);
+
+  // Setujui = password baru langsung berlaku di backend (hash tersimpan aman).
+  const handleSetujuPassword = async (requestId: number) => {
+    if (reviewing !== null) return;
+    setReviewing(requestId);
+    setPwNotice('');
+    setPwError('');
+    try {
+      await apiReviewPasswordRequest(requestId, 'APPROVE');
+      setRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setPwNotice('Permintaan disetujui — password baru langsung berlaku.');
+    } catch (err) {
+      setPwError(
+        err instanceof Error ? err.message : 'Gagal menyetujui permintaan.',
+      );
+    } finally {
+      setReviewing(null);
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleTolakPassword = async (requestId: number) => {
+    if (reviewing !== null) return;
+    setReviewing(requestId);
+    setPwNotice('');
+    setPwError('');
+    try {
+      await apiReviewPasswordRequest(requestId, 'REJECT');
+      setRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setPwNotice('Permintaan ditolak.');
+    } catch (err) {
+      setPwError(
+        err instanceof Error ? err.message : 'Gagal menolak permintaan.',
+      );
+    } finally {
+      setReviewing(null);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updatePengaturan(form);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    if (saving) return;
+    setSaving(true);
+    setCfgError('');
+    try {
+      await apiUpdatePengaturan({
+        namaSekolah: form.namaSekolah,
+        npsn: form.npsn,
+        alamat: form.alamat,
+        tahunAjaran: form.tahunAjaran,
+        semester: form.semester,
+        kepalaSekolah: form.kepalaSekolah,
+        jamMasuk: form.jamMasuk,
+        batasToleransi: form.batasToleransi,
+        notifikasiWA: form.notifikasiWA,
+        notifikasiEmail: form.notifikasiEmail,
+      });
+      updatePengaturan(form);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setCfgError(
+        err instanceof Error
+          ? `Gagal menyimpan ke backend: ${err.message}`
+          : 'Gagal menyimpan ke backend.',
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -56,38 +136,45 @@ export default function PengaturanPage() {
       {saved && (
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
           <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
-          Pengaturan berhasil disimpan.
+          Pengaturan berhasil disimpan di backend.
         </div>
       )}
 
-      {permintaanPassword.some((r) => r.status === 'Menunggu') && (
+      {cfgError && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+          <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
+          {cfgError}
+        </div>
+      )}
+
+      {requests.length > 0 && (
         <ScrollReveal delay={0.03}>
           <GlassCard className="p-6">
             <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <span className="material-symbols-outlined icon-fill text-emerald-600">admin_panel_settings</span>
               Persetujuan Ganti Password Sekretaris
             </h2>
-            <p className="mb-5 text-sm text-gray-500">Konfirmasi perubahan password akun sekretaris kelas sebelum password baru berlaku.</p>
+            <p className="mb-5 text-sm text-gray-500">Menyetujui berarti password baru langsung berlaku untuk akun peminta.</p>
             {pwNotice && (
               <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">{pwNotice}</p>
             )}
+            {pwError && (
+              <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{pwError}</p>
+            )}
             <div className="flex flex-col gap-3">
-              {permintaanPassword.filter((r) => r.status === 'Menunggu').map((request) => {
-                const account = sekretaris.find((a) => a.id === request.sekretarisId);
-                const kelas = account ? getKelas(account.kelasId) : undefined;
-                return (
-                  <div key={request.id} className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">{account?.username ?? '-'} · {kelas?.nama ?? '-'}</p>
-                      <p className="mt-1 text-xs text-gray-400">Diajukan {new Date(request.diajukanPada).toLocaleString('id-ID')}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => prosesGantiPassword(request.id, 'Ditolak')} className="rounded-lg border border-red-100 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">Tolak</button>
-                      <button type="button" onClick={() => handleSetujuPassword(request.id, request.sekretarisId, request.passwordBaru, account?.username ?? '')} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Setujui</button>
-                    </div>
+              {requests.map((request) => (
+                <div key={request.id} className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">{request.requester?.nama ?? '-'} · {request.requester?.sekretaris?.kelas?.nama ?? '-'}</p>
+                    <p className="text-xs text-gray-500">{request.requester?.email ?? '-'}</p>
+                    <p className="mt-1 text-xs text-gray-400">Diajukan {new Date(request.createdAt).toLocaleString('id-ID')}</p>
                   </div>
-                );
-              })}
+                  <div className="flex gap-2">
+                    <button type="button" disabled={reviewing === request.id} onClick={() => handleTolakPassword(request.id)} className="rounded-lg border border-red-100 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60">Tolak</button>
+                    <button type="button" disabled={reviewing === request.id} onClick={() => handleSetujuPassword(request.id)} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">Setujui</button>
+                  </div>
+                </div>
+              ))}
             </div>
           </GlassCard>
         </ScrollReveal>
@@ -224,10 +311,11 @@ export default function PengaturanPage() {
 
         <button
           type="submit"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3.5 text-sm font-semibold text-white shadow-cta transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97] sm:w-auto sm:self-end"
+          disabled={saving}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3.5 text-sm font-semibold text-white shadow-cta transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-emerald-500/70 sm:w-auto sm:self-end"
         >
           <span className="material-symbols-outlined icon-fill text-[18px]">save</span>
-          Simpan Perubahan
+          {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
         </button>
       </form>
     </main>

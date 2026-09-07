@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Sidebar, { Role } from '../../components/Sidebar';
 import TopHeader from '../../components/TopHeader';
+import BackendOfflineBanner from '../../components/BackendOfflineBanner';
 import { AppDataProvider } from '../../lib/store';
 import { getSession, roleForPath } from '../../lib/auth';
 
@@ -79,6 +80,7 @@ export default function DashboardLayout({
           />
 
           <div className="relative z-10 flex h-screen flex-1 flex-col overflow-y-auto md:ml-[280px]">
+            <BackendOfflineBanner />
             <TopHeader role={role} onMenuClick={() => setMobileOpen(true)} />
             {children}
           </div>

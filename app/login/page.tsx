@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { setSession } from '../../lib/auth';
+import { hrefForBackendRole, loginToBackend } from '../../lib/api';
+import { roleFromBackend, setSession } from '../../lib/auth';
 
 const DEMO_ROLES = [
   { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face', role: 'student' as const },
@@ -32,32 +33,26 @@ export default function LoginPage() {
       return;
     }
 
-    // Kredensial dicek ke database XAMPP (bcrypt) — bukan lagi hardcode.
+    // Kredensial dicek ke backend NestJS (sysch/back) — bukan lagi Next API.
     setSaving(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: identifier.trim(),
-          password,
-          role: selectedRole,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.error ?? 'Username atau password salah.');
+      const data = await loginToBackend(identifier.trim(), password);
+      // Cookie HttpOnly sudah dipasang server (route /api/auth/login).
+      // Cache sesi untuk UI client.
+      const frontRole = roleFromBackend(data.user.role);
+      // Hormati pilihan peran demo bila masih dipilih dan cocok.
+      if (selectedRole && selectedRole !== frontRole) {
+        setError(
+          `Akun tersebut terdaftar sebagai ${data.user.role}. Pilih peran yang sesuai untuk melanjutkan.`,
+        );
         return;
       }
-      // Cache sesi untuk UI client; penegakan akses oleh cookie HttpOnly + middleware.
-      setSession({
-        role: data.user.role,
-        username: data.user.username,
-        ...(data.user.secretaryId ? { secretaryId: data.user.secretaryId } : {}),
-      });
-      router.push(data.href);
-    } catch {
-      setError('Tidak dapat menghubungi server. Pastikan aplikasi dan MySQL XAMPP jalan.');
+      setSession({ role: frontRole, username: data.user.email });
+      router.push(hrefForBackendRole(data.user.role));
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Email atau password salah.',
+      );
     } finally {
       setSaving(false);
     }
@@ -117,7 +112,7 @@ export default function LoginPage() {
             )}
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700" htmlFor="identifier">
-                Email / NIS / NIP
+                Email
               </label>
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-gray-400">
@@ -128,9 +123,9 @@ export default function LoginPage() {
                   className={inputClasses}
                   id="identifier"
                   name="identifier"
-                  placeholder="Masukkan ID Anda"
+                  placeholder="nama@sekolah.sch.id"
                   required
-                  type="text"
+                  type="email"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                 />

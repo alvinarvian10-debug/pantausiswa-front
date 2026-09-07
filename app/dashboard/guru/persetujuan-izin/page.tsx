@@ -1,11 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Avatar from '../../../../components/Avatar';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
-import { CURRENT_GURU_ID, IzinRequest, useAppData } from '../../../../lib/store';
+import { apiListIzin, apiReviewIzin, type BackendIzin } from '../../../../lib/api';
+import {
+  CURRENT_GURU_ID,
+  IzinRequest,
+  useAppData,
+  type AvatarTone,
+} from '../../../../lib/store';
+
+const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+const tanggalSaja = (iso: string) => iso.slice(0, 10);
 
 const STATUS_STYLE: Record<string, string> = {
   Menunggu: 'bg-amber-50 text-amber-700 ring-amber-100',
@@ -21,112 +30,164 @@ const JENIS_ICON: Record<string, string> = {
 
 export default function PersetujuanIzinPage() {
   const { kelas, izin, getSiswa, prosesIzin, tambahRiwayatGuru } = useAppData();
-  const [activeKelasId, setActiveKelasId] = useState<string | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<IzinRequest | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<BarisIzin | null>(null);
   const [alasanTolak, setAlasanTolak] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [dbNotice, setDbNotice] = useState('');
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // PATCH ke DB; kalau id lokal lama tidak ada di DB (404), cari baris yang
-  // cocok (siswa+tanggal+jenis) lalu PATCH itu; kalau tidak ketemu, POST baru.
+  // Sumber kebenaran: backend bila terjangkau (beserta nama siswa & kelas),
+  // lokal bila tidak.
+  const [beIzin, setBeIzin] = useState<BackendIzin[] | null>(null);
+
+  const muatBackend = async () => {
+    try {
+      const res = await apiListIzin();
+      setBeIzin(res.data);
+    } catch {
+      setBeIzin(null);
+    }
+  };
+
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  interface BarisIzin {
+    key: string;
+    backendId: number | null;
+    lokal?: IzinRequest;
+    nama: string;
+    tone?: AvatarTone;
+    kelas: string;
+    jenis: string;
+    status: string;
+    tanggalMulai: string;
+    tanggalSelesai: string;
+    alasan: string;
+    lampiranNama: string | null;
+    alasanTolak: string | null;
+  }
+
+  const barisSemua: BarisIzin[] = useMemo(() => {
+    if (beIzin !== null) {
+      return beIzin.map((b) => ({
+        key: `be-${b.id}`,
+        backendId: b.id,
+        nama: b.siswa?.user?.nama ?? '-',
+        tone: undefined,
+        kelas: b.siswa?.kelas?.nama ?? '-',
+        jenis: kapital(b.jenis),
+        status: kapital(b.status),
+        tanggalMulai: tanggalSaja(b.tanggalMulai),
+        tanggalSelesai: tanggalSaja(b.tanggalSelesai),
+        alasan: b.keterangan,
+        lampiranNama: b.lampiranUrl,
+        alasanTolak: b.catatanReview,
+      }));
+    }
+    return izin.map((i) => {
+      const s = getSiswa(i.siswaId);
+      const k = kelas.find((x) => x.id === i.kelasId);
+      return {
+        key: `lokal-${i.id}`,
+        backendId: null,
+        lokal: i,
+        nama: s?.nama ?? 'Siswa tidak ditemukan',
+        tone: s?.tone,
+        kelas: k?.nama ?? '-',
+        jenis: i.jenis,
+        status: i.status,
+        tanggalMulai: i.tanggalMulai,
+        tanggalSelesai: i.tanggalSelesai,
+        alasan: i.alasan,
+        lampiranNama: i.lampiranNama,
+        alasanTolak: i.alasanTolak,
+      };
+    });
+  }, [beIzin, izin, getSiswa, kelas]);
+
+  const tabs = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of barisSemua) {
+      const pending = r.status === 'Menunggu' ? 1 : 0;
+      map.set(r.kelas, (map.get(r.kelas) ?? 0) + pending);
+    }
+    return [...map.entries()].map(([nama, pending]) => ({ nama, pending }));
+  }, [barisSemua]);
+
+  const activeKelas = activeTab ?? tabs[0]?.nama ?? null;
+
+  const kelasIzin = useMemo(() => {
+    if (!activeKelas) return [];
+    const list = barisSemua.filter((r) => r.kelas === activeKelas);
+    return showAll ? list : list.filter((r) => r.status === 'Menunggu');
+  }, [barisSemua, activeKelas, showAll]);
+
+  const pendingCount = useMemo(
+    () =>
+      activeKelas
+        ? barisSemua.filter((r) => r.kelas === activeKelas && r.status === 'Menunggu').length
+        : 0,
+    [barisSemua, activeKelas],
+  );
+
+  // Sinkron ke backend NestJS: PATCH /izin/:id/review.
+  // Dipakai untuk baris lokal lama; baris backend (id numerik) langsung
+  // lewat apiReviewIzin di handler. Id lokal non-numerik yang belum ada di
+  // backend tidak bisa di-review di sana.
   const syncKeDB = async (
     req: IzinRequest,
     patch: { keputusan: 'Disetujui' | 'Ditolak'; alasanTolak?: string },
   ) => {
-    const resPatch = await fetch(`/api/izin/${req.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    if (resPatch.ok) return;
-    const errBody = await resPatch.json().catch(() => null);
-    if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
-      try {
-        const listRes = await fetch('/api/izin');
-        if (listRes.ok) {
-          const list = await listRes.json();
-          const match = Array.isArray(list)
-            ? list.find(
-                (r: { id?: string; siswaId?: string; tanggalMulai?: string; jenis?: string }) =>
-                  r.siswaId === req.siswaId &&
-                  r.tanggalMulai === req.tanggalMulai &&
-                  r.jenis === req.jenis,
-              )
-            : null;
-          if (match?.id) {
-            const resRetry = await fetch(`/api/izin/${match.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(patch),
-            });
-            if (resRetry.ok) return;
-          }
-        }
-      } catch {
-        // lanjut ke POST di bawah
-      }
-      const resPost = await fetch('/api/izin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siswaId: req.siswaId,
-          kelasId: req.kelasId,
-          jenis: req.jenis,
-          tanggalMulai: req.tanggalMulai,
-          tanggalSelesai: req.tanggalSelesai,
-          alasan: req.alasan,
-          lampiranNama: req.lampiranNama,
-        }),
-      });
-      if (!resPost.ok) {
-        const postErr = await resPost.json().catch(() => null);
-        throw new Error(postErr?.error ?? 'Gagal membuat baris DB.');
-      }
-      const saved = await resPost.json().catch(() => null);
-      if (saved?.id) {
-        const resPatch2 = await fetch(`/api/izin/${saved.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-        if (!resPatch2.ok) throw new Error('Gagal update baris DB yang baru dibuat.');
-      }
-      return;
+    const numericId = Number(req.id);
+    if (!Number.isInteger(numericId)) {
+      throw new Error(
+        'Data lokal lama belum ada di backend (id non-numerik). Minta siswa ajukan ulang lewat backend.',
+      );
     }
-    throw new Error(errBody?.error ?? 'Gagal update database.');
+    await apiReviewIzin(
+      numericId,
+      patch.keputusan === 'Disetujui' ? 'DISETUJUI' : 'DITOLAK',
+      patch.alasanTolak,
+    );
   };
 
-  const myKelas = useMemo(() => kelas.filter((k) => k.waliKelasId === CURRENT_GURU_ID), [kelas]);
-  const activeKelas = myKelas.find((k) => k.id === activeKelasId) ?? myKelas[0] ?? null;
-
-  const kelasIzin = useMemo(() => {
-    if (!activeKelas) return [];
-    const list = izin.filter((i) => i.kelasId === activeKelas.id);
-    return showAll ? list : list.filter((i) => i.status === 'Menunggu');
-  }, [izin, activeKelas, showAll]);
-
-  const pendingCount = useMemo(
-    () => (activeKelas ? izin.filter((i) => i.kelasId === activeKelas.id && i.status === 'Menunggu').length : 0),
-    [izin, activeKelas],
-  );
-
-  const handleApprove = async (req: IzinRequest) => {
+  const handleApprove = async (row: BarisIzin) => {
     if (saving) return;
     setSaving(true);
     setDbError('');
     setDbNotice('');
+    if (row.backendId !== null) {
+      tambahRiwayatGuru(CURRENT_GURU_ID, 'Menyetujui izin', `Menyetujui pengajuan ${row.jenis.toLowerCase()} atas nama ${row.nama}`);
+      try {
+        await apiReviewIzin(row.backendId, 'DISETUJUI');
+        await muatBackend();
+        setDbNotice('Persetujuan tersimpan di backend (termasuk sinkron presensi).');
+      } catch (err) {
+        setDbError(
+          err instanceof Error
+            ? `Gagal menyimpan ke backend: ${err.message}`
+            : 'Gagal menyimpan ke backend.',
+        );
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    const req = row.lokal!;
     prosesIzin(req.id, 'Disetujui');
     tambahRiwayatGuru(CURRENT_GURU_ID, 'Menyetujui izin', `Menyetujui pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama ?? '-'}`);
     try {
       await syncKeDB(req, { keputusan: 'Disetujui' });
-      setDbNotice('Persetujuan tersimpan di database XAMPP (termasuk catatan presensi).');
+      setDbNotice('Persetujuan tersimpan di backend (termasuk sinkron presensi).');
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Lokal berubah, tapi gagal masuk database: ${err.message}`
-          : 'Lokal berubah, tapi gagal masuk database.',
+          ? `Lokal berubah, tapi gagal masuk backend: ${err.message}`
+          : 'Lokal berubah, tapi gagal masuk backend.',
       );
     } finally {
       setSaving(false);
@@ -141,16 +202,36 @@ export default function PersetujuanIzinPage() {
     setSaving(true);
     setDbError('');
     setDbNotice('');
-    prosesIzin(target.id, 'Ditolak', teks);
-    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${target.jenis.toLowerCase()} atas nama ${getSiswa(target.siswaId)?.nama ?? '-'} — ${teks}`);
+    if (target.backendId !== null) {
+      tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${target.jenis.toLowerCase()} atas nama ${target.nama} — ${teks}`);
+      try {
+        await apiReviewIzin(target.backendId, 'DITOLAK', teks);
+        await muatBackend();
+        setDbNotice('Penolakan tersimpan di backend.');
+      } catch (err) {
+        setDbError(
+          err instanceof Error
+            ? `Gagal menyimpan ke backend: ${err.message}`
+            : 'Gagal menyimpan ke backend.',
+        );
+      } finally {
+        setSaving(false);
+        setRejectTarget(null);
+        setAlasanTolak('');
+      }
+      return;
+    }
+    const req = target.lokal!;
+    prosesIzin(req.id, 'Ditolak', teks);
+    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama ?? '-'} — ${teks}`);
     try {
-      await syncKeDB(target, { keputusan: 'Ditolak', alasanTolak: teks });
-      setDbNotice('Penolakan tersimpan di database XAMPP.');
+      await syncKeDB(req, { keputusan: 'Ditolak', alasanTolak: teks });
+      setDbNotice('Penolakan tersimpan di backend.');
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Lokal berubah, tapi gagal masuk database: ${err.message}`
-          : 'Lokal berubah, tapi gagal masuk database.',
+          ? `Lokal berubah, tapi gagal masuk backend: ${err.message}`
+          : 'Lokal berubah, tapi gagal masuk backend.',
       );
     } finally {
       setSaving(false);
@@ -173,28 +254,25 @@ export default function PersetujuanIzinPage() {
       <ScrollReveal delay={0.05}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-3">
-            {myKelas.map((k) => {
-              const count = izin.filter((i) => i.kelasId === k.id && i.status === 'Menunggu').length;
-              return (
-                <button
-                  key={k.id}
-                  type="button"
-                  onClick={() => setActiveKelasId(k.id)}
-                  className={`relative rounded-xl px-5 py-3 text-sm font-semibold transition-all ${
-                    activeKelas?.id === k.id
-                      ? 'bg-emerald-600 text-white shadow-cta'
-                      : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
-                  }`}
-                >
-                  {k.nama}
-                  {count > 0 && (
-                    <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {tabs.map((t) => (
+              <button
+                key={t.nama}
+                type="button"
+                onClick={() => setActiveTab(t.nama)}
+                className={`relative rounded-xl px-5 py-3 text-sm font-semibold transition-all ${
+                  activeKelas === t.nama
+                    ? 'bg-emerald-600 text-white shadow-cta'
+                    : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+                }`}
+              >
+                {t.nama}
+                {t.pending > 0 && (
+                  <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+                    {t.pending}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-600">
             <input
@@ -222,17 +300,16 @@ export default function PersetujuanIzinPage() {
       )}
 
       {activeKelas && (
-        <StaggerGroup key={`${activeKelas.id}-${showAll}`} as="div" className="flex flex-col gap-4">
+        <StaggerGroup key={`${activeKelas}-${showAll}`} as="div" className="flex flex-col gap-4">
           {kelasIzin.map((req) => {
-            const s = getSiswa(req.siswaId);
             return (
-              <GlassCard key={req.id} className="p-6">
+              <GlassCard key={req.key} className="p-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex gap-4">
-                    <Avatar name={s?.nama ?? '?'} tone={s?.tone} className="h-11 w-11" />
+                    <Avatar name={req.nama} tone={req.tone} className="h-11 w-11" />
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold text-gray-900">{s?.nama ?? 'Siswa tidak ditemukan'}</h3>
+                        <h3 className="text-sm font-semibold text-gray-900">{req.nama}</h3>
                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 ring-1 ring-inset ring-slate-100">
                           <span className="material-symbols-outlined text-[12px]">{JENIS_ICON[req.jenis]}</span>
                           {req.jenis}
@@ -290,7 +367,7 @@ export default function PersetujuanIzinPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
           <GlassCard className="max-h-[90vh] w-full max-w-md overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-gray-900">
-              Tolak Pengajuan {getSiswa(rejectTarget.siswaId)?.nama}
+              Tolak Pengajuan {rejectTarget.nama}
             </h2>
             <form className="mt-5 flex flex-col gap-4" onSubmit={handleReject}>
               <div className="flex flex-col gap-1.5">

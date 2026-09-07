@@ -1,14 +1,24 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
+import { apiCreateAduan, apiMyAduan, toBackendKategori, type BackendAduan } from '../../../../lib/api';
 import { CURRENT_SISWA_ID, JenisAduan, useAppData } from '../../../../lib/store';
+
+const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+const STATUS_BE_KE_DEPAN: Record<string, string> = {
+  BARU: 'Baru',
+  DIPROSES: 'Proses',
+  SELESAI: 'Selesai',
+  DITOLAK: 'Ditolak',
+};
 
 const STATUS_STYLE: Record<string, string> = {
   Baru: 'bg-blue-50 text-blue-700 ring-blue-100',
   Proses: 'bg-amber-50 text-amber-700 ring-amber-100',
   Selesai: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  Ditolak: 'bg-red-50 text-red-600 ring-red-100',
 };
 
 const FILTERS = ['Semua', 'Baru', 'Proses', 'Selesai'] as const;
@@ -29,11 +39,44 @@ export default function AduanPage() {
     lampiranNama: null as string | null,
   });
 
-  const myAduan = useMemo(
+  const myAduanLokal = useMemo(
     () => aduan.filter((a) => a.siswaId === CURRENT_SISWA_ID),
     [aduan],
   );
   const [dbError, setDbError] = useState('');
+
+  // Sumber kebenaran: backend bila terjangkau, lokal bila tidak.
+  const [beAduan, setBeAduan] = useState<BackendAduan[] | null>(null);
+
+  const muatBackend = async () => {
+    try {
+      const res = await apiMyAduan();
+      setBeAduan(res.data);
+    } catch {
+      setBeAduan(null);
+    }
+  };
+
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  const myAduan = useMemo(
+    () =>
+      beAduan !== null
+        ?       beAduan.map((a) => ({
+            id: String(a.id),
+            jenis: (a.kategori === 'FASILITAS' ? 'Fasilitas' : 'Keluhan') as JenisAduan,
+            judul: a.judul,
+            deskripsi: a.deskripsi,
+            isAnonim: a.isAnonim,
+            tanggal: (a.createdAt ?? '').slice(0, 10),
+            status: STATUS_BE_KE_DEPAN[a.status] ?? kapital(a.status),
+            tanggapan: a.tanggapan,
+          }))
+        : myAduanLokal,
+    [beAduan, myAduanLokal],
+  );
 
   const stats = useMemo(() => {
     const total = myAduan.length;
@@ -65,31 +108,29 @@ export default function AduanPage() {
       lampiranNama: form.lampiranNama,
       isAnonim: form.isAnonim,
     };
-    // 1) Simpan ke MySQL XAMPP via API (agar masuk database).
-    //    Pakai id baris DB sebagai id lokal supaya PATCH admin cocok.
+    // 1) Simpan ke backend NestJS via POST /aduan (agar masuk database).
+    //    Pakai id baris backend sebagai id lokal supaya PATCH admin cocok.
     let dbId: string | undefined;
     try {
-      const res = await fetch('/api/complaints', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const saved = await apiCreateAduan({
+        judul: form.judul.trim(),
+        deskripsi: form.deskripsi.trim(),
+        kategori: toBackendKategori(form.jenis),
+        ...(form.lampiranNama ? { lampiranUrl: form.lampiranNama } : {}),
+        ...(form.isAnonim ? { isAnonim: true } : {}),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
-      }
-      const saved = await res.json().catch(() => null);
-      if (saved?.id) dbId = String(saved.id);
+      if (saved?.id != null) dbId = String(saved.id);
     } catch (err) {
-      // Jangan blokir UX: tetap simpan lokal, tapi beri tahu user DB gagal.
+      // Jangan blokir UX: tetap simpan lokal, tapi beri tahu user backend gagal.
       setDbError(
         err instanceof Error
-          ? `Tersimpan lokal, tapi gagal masuk database XAMPP: ${err.message} (pastikan MySQL XAMPP jalan).`
-          : 'Tersimpan lokal, tapi gagal masuk database XAMPP.',
+          ? `Tersimpan lokal, tapi gagal masuk backend: ${err.message} (pastikan backend + MySQL jalan).`
+          : 'Tersimpan lokal, tapi gagal masuk backend.',
       );
     }
     // 2) Tetap simpan ke store lokal agar UI langsung update (optimistic).
     buatAduan(dbId ? { ...payload, id: dbId } : payload);
+    await muatBackend();
     setSubmitting(false);
     setOpenForm(false);
     setSuccess(true);

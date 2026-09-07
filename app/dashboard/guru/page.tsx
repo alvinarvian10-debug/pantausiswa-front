@@ -8,6 +8,9 @@ import ScrollReveal from '../../../components/ScrollReveal';
 import StaggerGroup from '../../../components/StaggerGroup';
 import AnimatedCounter from '../../../components/AnimatedCounter';
 import { CURRENT_GURU_ID, useAppData } from '../../../lib/store';
+import { apiListIzin, apiMe, type BackendIzin } from '../../../lib/api';
+
+const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
 export default function GuruDashboard() {
   const [today, setToday] = useState('');
@@ -29,6 +32,17 @@ export default function GuruDashboard() {
   const primaryKelas = myKelas[0] ?? null;
   const todayDate = new Date().toISOString().slice(0, 10);
 
+  // Nama penyapa + antrean izin dari backend bila terjangkau.
+  const [namaBackend, setNamaBackend] = useState<string | null>(null);
+  const [beIzin, setBeIzin] = useState<BackendIzin[] | null>(null);
+
+  useEffect(() => {
+    apiMe().then((u) => setNamaBackend(u.nama)).catch(() => setNamaBackend(null));
+    apiListIzin('MENUNGGU').then((r) => setBeIzin(r.data)).catch(() => setBeIzin(null));
+  }, []);
+
+  const namaTampil = namaBackend ?? me?.nama ?? 'Guru';
+
   const roster = useMemo(() => {
     if (!primaryKelas) return [];
     return siswa
@@ -42,10 +56,41 @@ export default function GuruDashboard() {
   const hadirCount = roster.filter((r) => r.status === 'Hadir').length;
   const persenHadir = roster.length > 0 ? Math.round((hadirCount / roster.length) * 100) : 0;
 
-  const pendingIzin = useMemo(
+  const pendingIzinLokal = useMemo(
     () => izin.filter((i) => myKelas.some((k) => k.id === i.kelasId) && i.status === 'Menunggu'),
     [izin, myKelas],
   );
+
+  interface IzinRingkas {
+    key: string;
+    nama: string;
+    jenis: string;
+    alasan: string;
+    tanggal: string;
+  }
+
+  // Backend: seluruh antrean MENUNGGU (beserta nama peminta). Lokal: kelas wali.
+  const pendingIzin: IzinRingkas[] = useMemo(() => {
+    if (beIzin !== null) {
+      return beIzin.map((b) => ({
+        key: `be-${b.id}`,
+        nama: b.siswa?.user?.nama ?? '-',
+        jenis: kapital(b.jenis),
+        alasan: b.keterangan,
+        tanggal: b.tanggalMulai.slice(0, 10),
+      }));
+    }
+    return pendingIzinLokal.map((i) => {
+      const s = getSiswa(i.siswaId);
+      return {
+        key: `lokal-${i.id}`,
+        nama: s?.nama ?? 'Siswa tidak ditemukan',
+        jenis: i.jenis,
+        alasan: i.alasan,
+        tanggal: i.tanggalMulai,
+      };
+    });
+  }, [beIzin, pendingIzinLokal, getSiswa]);
 
   const tugasPerluDinilai = useMemo(
     () => submisi.filter((s) => s.status === 'Menunggu Nilai' && tugas.some((t) => t.id === s.tugasId && t.guruId === CURRENT_GURU_ID)).length,
@@ -57,9 +102,9 @@ export default function GuruDashboard() {
       {/* Greeting */}
       <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
         <div>
-          <h1 className="mb-2 text-3xl font-bold leading-tight tracking-tight text-gray-900 md:text-4xl">
-            Selamat Datang, <span className="text-emerald-600">{me?.nama ?? 'Guru'}</span>
-          </h1>
+            <h1 className="mb-2 text-3xl font-bold leading-tight tracking-tight text-gray-900 md:text-4xl">
+              Selamat Datang, <span className="text-emerald-600">{namaTampil}</span>
+            </h1>
           <p className="flex items-center gap-2 text-base text-gray-500">
             <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-500">
               today
@@ -206,20 +251,18 @@ export default function GuruDashboard() {
 
         <StaggerGroup as="div" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {pendingIzin.slice(0, 4).map((req) => {
-            const s = getSiswa(req.siswaId);
             return (
               <GlassCard
-                key={req.id}
+                key={req.key}
                 className="flex h-full flex-col items-start gap-5 p-6 sm:flex-row sm:items-center"
               >
                 <Avatar
-                  name={s?.nama ?? '?'}
-                  tone={s?.tone}
+                  name={req.nama}
                   className="h-14 w-14 rounded-2xl text-lg"
                 />
                 <div className="min-w-0 flex-1">
                   <h4 className="truncate text-base font-semibold text-gray-900">
-                    {s?.nama ?? 'Siswa tidak ditemukan'}
+                    {req.nama}
                   </h4>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600 ring-1 ring-inset ring-orange-100">
@@ -227,7 +270,7 @@ export default function GuruDashboard() {
                     </span>
                     <span className="flex items-center gap-1 text-sm text-gray-400">
                       <span className="material-symbols-outlined text-[16px]">schedule</span>
-                      {req.tanggalMulai}
+                      {req.tanggal}
                     </span>
                   </div>
                 </div>

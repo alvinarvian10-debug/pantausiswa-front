@@ -1,9 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import {
+  apiCreateBarang,
+  apiListBarang,
+  apiListPeminjaman,
+  apiUpdateBarang,
+  type BackendBarang,
+  type BackendPeminjaman,
+} from '../../../../lib/api';
 import { KategoriFasilitas, KondisiFasilitas, useAppData } from '../../../../lib/store';
 
 const KONDISI_STYLE: Record<KondisiFasilitas, string> = {
@@ -24,64 +32,147 @@ export default function InventarisPage() {
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // PATCH kondisi ke DB; id lokal lama (F-xx) dicocokkan via nama bila 404.
-  const syncKondisiKeDB = async (fasilitasId: string, nama: string, kondisi: KondisiFasilitas) => {
-    const resPatch = await fetch(`/api/fasilitas/${fasilitasId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kondisi }),
-    });
-    if (resPatch.ok) return;
-    const errBody = await resPatch.json().catch(() => null);
-    if (resPatch.status === 404 || errBody?.code === 'NOT_FOUND') {
-      const listRes = await fetch('/api/fasilitas');
-      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
-      const match = Array.isArray(list)
-        ? list.find((r: { id?: string; nama?: string }) => r.nama === nama)
-        : null;
-      if (match?.id) {
-        const resRetry = await fetch(`/api/fasilitas/${match.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kondisi }),
-        });
-        if (resRetry.ok) return;
-      }
-      throw new Error('Fasilitas ini belum ada di database. Tambahkan ulang via form.');
+  // Sumber kebenaran: backend bila terjangkau, lokal bila tidak.
+  const [beBarang, setBeBarang] = useState<BackendBarang[] | null>(null);
+  const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
+
+  const muatBackend = async () => {
+    try {
+      const [b, p] = await Promise.all([
+        apiListBarang(),
+        apiListPeminjaman('DIPINJAM'),
+      ]);
+      setBeBarang(b);
+      setBePinjam(p.data);
+    } catch {
+      setBeBarang(null);
+      setBePinjam(null);
     }
-    throw new Error(errBody?.error ?? 'Gagal update database.');
   };
 
-  const handleKondisi = async (fasilitasId: string, nama: string, kondisi: KondisiFasilitas) => {
-    updateKondisiFasilitas(fasilitasId, kondisi);
+  useEffect(() => {
+    muatBackend();
+  }, []);
+
+  interface BarangView {
+    key: string;
+    backendId: number | null;
+    idLokal: string | null;
+    nama: string;
+    kategori: string;
+    icon: string;
+    jumlahTotal: number;
+    jumlahTersedia: number;
+    kondisi: KondisiFasilitas;
+  }
+
+  const daftarBarang: BarangView[] = useMemo(() => {
+    if (beBarang !== null) {
+      return beBarang.map((b) => ({
+        key: `be-${b.id}`,
+        backendId: b.id,
+        idLokal: null,
+        nama: b.nama,
+        kategori: b.kategori,
+        icon: b.icon ?? 'inventory_2',
+        jumlahTotal: b.jumlahTotal,
+        jumlahTersedia: b.jumlahTersedia,
+        kondisi: (b.kondisi === 'BAIK' ? 'Baik' : 'Rusak') as KondisiFasilitas,
+      }));
+    }
+    return fasilitas.map((f) => ({
+      key: `lokal-${f.id}`,
+      backendId: Number.isInteger(Number(f.id)) ? Number(f.id) : null,
+      idLokal: f.id,
+      nama: f.nama,
+      kategori: f.kategori,
+      icon: f.icon,
+      jumlahTotal: f.jumlahTotal,
+      jumlahTersedia: f.jumlahTersedia,
+      kondisi: f.kondisi,
+    }));
+  }, [beBarang, fasilitas]);
+
+  // PATCH kondisi ke backend (Baik→BAIK, Rusak→RUSAK_BERAT,
+  // Diperbaiki→RUSAK_RINGAN). Id lokal non-numerik dicocokkan via nama.
+  const syncKondisiKeDB = async (fasilitasId: string | number, nama: string, kondisi: KondisiFasilitas) => {
+    const backendKondisi =
+      kondisi === 'Rusak' ? 'RUSAK_BERAT' : kondisi === 'Diperbaiki' ? 'RUSAK_RINGAN' : 'BAIK';
+    let numericId = Number(fasilitasId);
+    if (!Number.isInteger(numericId)) {
+      const daftar = await apiListBarang();
+      const match = daftar.find(
+        (b) => b.nama.toLowerCase() === nama.trim().toLowerCase(),
+      );
+      if (!match) {
+        throw new Error('Fasilitas ini belum ada di backend. Tambahkan ulang via form.');
+      }
+      numericId = match.id;
+    }
+    await apiUpdateBarang(numericId, { kondisi: backendKondisi });
+  };
+
+  const handleKondisi = async (view: BarangView, kondisi: KondisiFasilitas) => {
+    if (view.idLokal) updateKondisiFasilitas(view.idLokal, kondisi);
     setDbError('');
     setDbNotice('');
     try {
-      await syncKondisiKeDB(fasilitasId, nama, kondisi);
-      setDbNotice(`Kondisi "${nama}" → ${kondisi}, tersimpan di database.`);
+      await syncKondisiKeDB(view.backendId ?? view.key, view.nama, kondisi);
+      await muatBackend();
+      setDbNotice(`Kondisi "${view.nama}" → ${kondisi}, tersimpan di backend.`);
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Lokal berubah, tapi gagal masuk database: ${err.message}`
-          : 'Lokal berubah, tapi gagal masuk database.',
+          ? `Lokal berubah, tapi gagal masuk backend: ${err.message}`
+          : 'Lokal berubah, tapi gagal masuk backend.',
       );
     }
   };
 
   const stats = useMemo(() => {
-    const total = fasilitas.reduce((sum, f) => sum + f.jumlahTotal, 0);
-    const dipinjam = peminjaman.filter((p) => p.status === 'Dipinjam').length;
-    const rusak = fasilitas.filter((f) => f.kondisi === 'Rusak').length;
-    const diperbaiki = fasilitas.filter((f) => f.kondisi === 'Diperbaiki').length;
+    const total = daftarBarang.reduce((sum, f) => sum + f.jumlahTotal, 0);
+    const dipinjam = bePinjam !== null
+      ? bePinjam.length
+      : peminjaman.filter((p) => p.status === 'Dipinjam').length;
+    const rusak = daftarBarang.filter((f) => f.kondisi === 'Rusak').length;
+    const diperbaiki = daftarBarang.filter((f) => f.kondisi === 'Diperbaiki').length;
     return [
       { label: 'Total Unit', count: total, icon: 'inventory_2', chip: 'bg-blue-50 text-blue-600 ring-blue-100' },
       { label: 'Sedang Dipinjam', count: dipinjam, icon: 'front_hand', chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
       { label: 'Rusak', count: rusak, icon: 'build', chip: 'bg-red-50 text-red-600 ring-red-100' },
       { label: 'Diperbaiki', count: diperbaiki, icon: 'handyman', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
     ];
-  }, [fasilitas, peminjaman]);
+  }, [daftarBarang, bePinjam, peminjaman]);
 
-  const activeLoans = useMemo(() => peminjaman.filter((p) => p.status === 'Dipinjam'), [peminjaman]);
+  interface PinjamanAktifView {
+    key: string;
+    barangNama: string;
+    peminjam: string;
+    detail: string;
+  }
+
+  const activeLoans: PinjamanAktifView[] = useMemo(() => {
+    if (bePinjam !== null) {
+      return bePinjam.map((p) => ({
+        key: `be-${p.id}`,
+        barangNama: p.barang?.nama ?? '-',
+        peminjam: p.siswa?.user?.nama ?? '-',
+        detail: `${p.catatan ?? ''} · Kembali: ${p.tanggalKembali.slice(0, 10)}`,
+      }));
+    }
+    return peminjaman
+      .filter((p) => p.status === 'Dipinjam')
+      .map((p) => {
+        const f = fasilitas.find((x) => x.id === p.fasilitasId);
+        const s = getSiswa(p.siswaId);
+        return {
+          key: `lokal-${p.id}`,
+          barangNama: f?.nama ?? '-',
+          peminjam: s?.nama ?? '-',
+          detail: `${p.keperluan} · Batas: ${p.batasKembali.slice(11, 16)} WIB`,
+        };
+      });
+  }, [bePinjam, peminjaman, fasilitas, getSiswa]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,25 +189,23 @@ export default function InventarisPage() {
       kondisi: 'Baik' as KondisiFasilitas,
     };
     try {
-      const res = await fetch('/api/fasilitas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const saved = await apiCreateBarang({
+        nama: payload.nama,
+        kode: `INV-${Date.now().toString(36).toUpperCase()}`,
+        kategori: payload.kategori,
+        jumlahTotal: payload.jumlahTotal,
+        icon: payload.icon,
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? 'Gagal menyimpan ke database.');
-      }
-      const saved = await res.json().catch(() => null);
-      tambahFasilitas({ ...payload, ...(saved?.id ? { id: String(saved.id) } : {}) });
-      setDbNotice(`Fasilitas "${payload.nama}" tersimpan di database XAMPP.`);
+      tambahFasilitas({ ...payload, ...(saved?.id != null ? { id: String(saved.id) } : {}) });
+      await muatBackend();
+      setDbNotice(`Fasilitas "${payload.nama}" tersimpan di backend.`);
       setForm({ nama: '', kategori: 'Elektronik', icon: 'inventory_2', jumlahTotal: 1 });
       setOpenForm(false);
     } catch (err) {
       setDbError(
         err instanceof Error
-          ? `Gagal masuk database: ${err.message}`
-          : 'Gagal masuk database.',
+          ? `Gagal masuk backend: ${err.message}`
+          : 'Gagal masuk backend.',
       );
     } finally {
       setSaving(false);
@@ -235,14 +324,12 @@ export default function InventarisPage() {
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">Sedang Dipinjam</h2>
             <div className="flex flex-col gap-3">
               {activeLoans.map((p) => {
-                const f = fasilitas.find((x) => x.id === p.fasilitasId);
-                const s = getSiswa(p.siswaId);
                 return (
-                  <GlassCard key={p.id} className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <GlassCard key={p.key} className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm font-medium text-gray-900">
-                      {f?.nama} — dipinjam oleh <span className="font-semibold">{s?.nama}</span>
+                      {p.barangNama} — dipinjam oleh <span className="font-semibold">{p.peminjam}</span>
                     </p>
-                    <p className="text-xs text-gray-500">{p.keperluan} · Batas: {p.batasKembali.slice(11, 16)} WIB</p>
+                    <p className="text-xs text-gray-500">{p.detail}</p>
                   </GlassCard>
                 );
               })}
@@ -264,8 +351,8 @@ export default function InventarisPage() {
               </tr>
             </thead>
             <tbody>
-              {fasilitas.map((f) => (
-                <tr key={f.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+              {daftarBarang.map((f) => (
+                <tr key={f.key} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100">
@@ -284,7 +371,7 @@ export default function InventarisPage() {
                   <td className="px-6 py-4">
                     <select
                       value={f.kondisi}
-                      onChange={(e) => handleKondisi(f.id, f.nama, e.target.value as KondisiFasilitas)}
+                      onChange={(e) => handleKondisi(f, e.target.value as KondisiFasilitas)}
                       className="rounded-lg border border-slate-100 bg-white px-3 py-1.5 text-xs text-gray-600 outline-none focus:border-emerald-300"
                     >
                       <option value="Baik">Baik</option>

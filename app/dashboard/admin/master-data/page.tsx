@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import Avatar from '../../../../components/Avatar';
 import GlassCard from '../../../../components/GlassCard';
@@ -13,6 +13,28 @@ import {
   Siswa,
   useAppData,
 } from '../../../../lib/store';
+import {
+  apiCreateGuru,
+  apiCreateKelas,
+  apiCreateSiswa,
+  apiDeleteGuru,
+  apiDeleteKelas,
+  apiDeleteSiswa,
+  apiImportGuru,
+  apiImportSiswa,
+  apiListGuru,
+  apiListKelas,
+  apiListMapel,
+  apiListSiswa,
+  apiUpdateGuru,
+  apiUpdateKelas,
+  apiUpdateSiswa,
+  DEFAULT_AKUN_PASSWORD,
+  emailGuruFromNama,
+  emailSiswaFromNis,
+  nipOtomatis,
+  tingkatDariNama,
+} from '../../../../lib/api';
 
 type Tab = 'siswa' | 'guru' | 'kelas';
 
@@ -26,22 +48,20 @@ function asTone(t: unknown): AvatarTone {
 function toSiswa(r: { id: string; nama: string; nis: string; kelasId?: string | null; tone?: string }): Siswa {
   return { id: r.id, nama: r.nama, nis: r.nis, kelasId: r.kelasId ?? '', tone: asTone(r.tone) };
 }
-function toGuru(r: { id: string; nama: string; mapel?: string; waliKelasId?: string | null; tone?: string }): Guru {
+function toGuru(r: { id: string; nama: string; mapel?: string | string[]; waliKelasId?: string | null; tone?: string }): Guru {
+  const mapelArr = Array.isArray(r.mapel)
+    ? r.mapel.map((m) => String(m).trim()).filter(Boolean)
+    : String(r.mapel ?? '').split(',').map((m) => m.trim()).filter(Boolean);
   return {
     id: r.id,
     nama: r.nama,
-    mapel: String(r.mapel ?? '').split(',').map((m) => m.trim()).filter(Boolean),
+    mapel: mapelArr,
     waliKelasId: r.waliKelasId ?? null,
     tone: asTone(r.tone),
   };
 }
 function toKelas(r: { id: string; nama: string; waliKelasId?: string | null }): Kelas {
   return { id: r.id, nama: r.nama, waliKelasId: r.waliKelasId ?? null };
-}
-
-async function bacaError(res: Response): Promise<string> {
-  const data = await res.json().catch(() => null);
-  return data?.error ?? 'Gagal menghubungi database.';
 }
 
 interface ImportResult {
@@ -128,6 +148,86 @@ export default function MasterDataPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
 
+  // Satukan ID backend ke store lokal saat halaman dibuka: cocokkan kelas
+  // by nama, guru by nama, siswa by NIS — baris lokal adopsi id numerik
+  // backend agar seluruh referensi (wali, kelas, dst.) konsisten.
+  // Gagal (backend mati) → tabel tetap tampil dari lokal.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [kelasBE, guruBE, siswaBE] = await Promise.all([
+          apiListKelas(),
+          apiListGuru(),
+          apiListSiswa(),
+        ]);
+        const kelasDiproses = new Set<string>();
+        for (const k of kelasBE) {
+          const idBE = String(k.id);
+          const lokal = kelas.find(
+            (x) => !kelasDiproses.has(x.id) && x.nama.toLowerCase() === k.nama.trim().toLowerCase() && x.id !== idBE,
+          );
+          if (lokal) {
+            kelasDiproses.add(lokal.id);
+            adopsiIdKelas(lokal.id, { id: idBE, nama: k.nama, waliKelasId: lokal.waliKelasId });
+          } else if (!kelas.some((x) => x.id === idBE)) {
+            upsertKelas({ id: idBE, nama: k.nama, waliKelasId: null });
+          }
+        }
+        const guruDiproses = new Set<string>();
+        for (const g of guruBE) {
+          const idBE = String(g.id);
+          const lokal = guru.find(
+            (x) => !guruDiproses.has(x.id) && x.nama.toLowerCase() === g.nama.trim().toLowerCase() && x.id !== idBE,
+          );
+          const waliKelasId = g.kelasDiampu?.[0] ? String(g.kelasDiampu[0].id) : null;
+          // mapel kini sumbernya backend (relasi guru_mapel).
+          const mapel = g.mapel ?? [];
+          if (lokal) {
+            guruDiproses.add(lokal.id);
+            adopsiIdGuru(lokal.id, { id: idBE, nama: g.nama, mapel, waliKelasId, tone: lokal.tone });
+          } else if (!guru.some((x) => x.id === idBE)) {
+            upsertGuru({ id: idBE, nama: g.nama, mapel, waliKelasId, tone: 'emerald' });
+          }
+        }
+        const siswaDiproses = new Set<string>();
+        for (const s of siswaBE) {
+          const idBE = String(s.siswa?.id ?? s.id);
+          const kelasIdBE = s.siswa?.kelasId ?? s.kelasId ?? null;
+          const lokal = siswa.find(
+            (x) => !siswaDiproses.has(x.id) && x.nis === s.nis && x.id !== idBE,
+          );
+          if (lokal) {
+            siswaDiproses.add(lokal.id);
+            adopsiIdSiswa(lokal.id, {
+              id: idBE,
+              nama: s.nama,
+              nis: s.nis,
+              kelasId: kelasIdBE !== null && kelasIdBE !== undefined ? String(kelasIdBE) : lokal.kelasId,
+              tone: lokal.tone,
+            });
+          } else if (!siswa.some((x) => x.id === idBE)) {
+            upsertSiswa({
+              id: idBE,
+              nama: s.nama,
+              nis: s.nis,
+              kelasId: kelasIdBE !== null && kelasIdBE !== undefined ? String(kelasIdBE) : '',
+              tone: 'emerald',
+            });
+          }
+        }
+        // Luruskan wali kelas ke kebenaran backend (adopsi guru menggeser id).
+        for (const k of kelasBE) {
+          if (k.waliId !== null && k.waliId !== undefined) {
+            updateKelas(String(k.id), { waliKelasId: String(k.waliId) });
+          }
+        }
+      } catch {
+        // abaikan — fallback lokal
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filteredSiswa = useMemo(
     () => siswa.filter((s) => s.nama.toLowerCase().includes(query.toLowerCase()) || s.nis.includes(query)),
     [siswa, query],
@@ -143,207 +243,228 @@ export default function MasterDataPage() {
     return map;
   }, [siswa]);
 
-  // -- Helper sinkronisasi: POST/PATCH/DELETE ke API, lokal mengikuti DB --------
+  // -- Helper sinkronisasi: backend NestJS dulu, lokal mengikuti ----------
+
+  // id kelas lokal (string) -> id numerik backend (langsung / cocok nama / buatkan).
+  async function resolveKelasIdBackend(kelasIdLokal: string): Promise<number> {
+    const direct = Number(kelasIdLokal);
+    if (Number.isInteger(direct)) return direct;
+    const daftar = await apiListKelas();
+    const lokal = kelas.find((k) => k.id === kelasIdLokal);
+    const match = daftar.find(
+      (k) => k.nama.toLowerCase() === (lokal?.nama ?? '').trim().toLowerCase(),
+    );
+    if (match) return match.id;
+    if (!lokal) throw new Error('Kelas tidak ditemukan di data lokal.');
+    const dibuat = await apiCreateKelas({
+      nama: lokal.nama,
+      tingkat: tingkatDariNama(lokal.nama),
+    });
+    upsertKelas({ id: String(dibuat.id), nama: dibuat.nama, waliKelasId: null });
+    return dibuat.id;
+  }
+
+  // id guru lokal (string) -> id numerik backend (langsung / cocok nama).
+  async function resolveGuruIdBackend(guruIdLokal: string): Promise<number> {
+    const direct = Number(guruIdLokal);
+    if (Number.isInteger(direct)) return direct;
+    const daftar = await apiListGuru();
+    const lokal = guru.find((g) => g.id === guruIdLokal);
+    const match = daftar.find(
+      (g) => g.nama.toLowerCase() === (lokal?.nama ?? '').trim().toLowerCase(),
+    );
+    if (!match) throw new Error(`Guru "${lokal?.nama ?? '-'}" belum ada di backend.`);
+    return match.id;
+  }
 
   async function tambahSiswaDB(values: { nama: string; nis: string; kelasId: string }): Promise<string | null> {
     const tone = TONES[siswa.length % TONES.length];
-    const res = await fetch('/api/siswa', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...values, tone }),
+    const kelasId = await resolveKelasIdBackend(values.kelasId);
+    const saved = await apiCreateSiswa({
+      email: emailSiswaFromNis(values.nis),
+      password: DEFAULT_AKUN_PASSWORD,
+      nama: values.nama,
+      nis: values.nis,
+      kelasId,
     });
-    if (!res.ok) throw new Error(await bacaError(res));
-    const saved = await res.json();
-    addSiswa({ ...values, tone, id: String(saved.id) });
+    const sid = saved.siswa?.id ?? saved.id;
+    addSiswa({ ...values, tone, id: String(sid) });
     return null;
   }
 
   async function ubahSiswaDB(id: string, values: { nama: string; nis: string; kelasId: string }): Promise<string | null> {
-    const res = await fetch(`/api/siswa/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
+    const kelasId = await resolveKelasIdBackend(values.kelasId);
+    const patch = { nama: values.nama, nis: values.nis, kelasId };
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      await apiUpdateSiswa(numericId, patch);
+      updateSiswa(id, values);
+      return null;
+    }
+    // Data lama (S-xx): cocokkan via NIS lalu adopsi id backend.
+    const daftar = await apiListSiswa();
+    const match = daftar.find((r) => r.nis === values.nis);
+    if (match?.id != null) {
+      await apiUpdateSiswa(match.id, patch);
+      adopsiIdSiswa(id, { id: String(match.id), nama: values.nama, nis: values.nis, kelasId: values.kelasId, tone: asTone(undefined) });
+      return null;
+    }
+    // Belum ada di backend sama sekali: buatkan lalu adopsi.
+    const saved = await apiCreateSiswa({
+      email: emailSiswaFromNis(values.nis),
+      password: DEFAULT_AKUN_PASSWORD,
+      nama: values.nama,
+      nis: values.nis,
+      kelasId,
     });
-    if (res.ok) {
-      const saved = await res.json().catch(() => null);
-      if (saved?.id) updateSiswa(id, values);
-      else updateSiswa(id, values);
-      return null;
-    }
-    const errBody = await res.json().catch(() => null);
-    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-      // Data lama (S-xx): cocokkan via NIS lalu adopsi id DB.
-      const listRes = await fetch('/api/siswa');
-      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
-      const match = Array.isArray(list) ? list.find((r: { nis?: string }) => r.nis === values.nis) : null;
-      if (match?.id) {
-        const resRetry = await fetch(`/api/siswa/${match.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values),
-        });
-        if (!resRetry.ok) throw new Error(await bacaError(resRetry));
-        const saved = await resRetry.json().catch(() => null);
-        adopsiIdSiswa(id, toSiswa(saved ?? { ...match, ...values }));
-        return null;
-      }
-      // Belum ada di DB sama sekali: buatkan lalu adopsi.
-      const resPost = await fetch('/api/siswa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, tone: TONES[siswa.length % TONES.length] }),
-      });
-      if (!resPost.ok) throw new Error(await bacaError(resPost));
-      const saved = await resPost.json();
-      adopsiIdSiswa(id, toSiswa(saved));
-      return null;
-    }
-    throw new Error(errBody?.error ?? 'Gagal update database.');
+    const sid = saved.siswa?.id ?? saved.id;
+    adopsiIdSiswa(id, { id: String(sid), nama: values.nama, nis: values.nis, kelasId: values.kelasId, tone: asTone(undefined) });
+    return null;
   }
 
   async function hapusSiswaDB(id: string): Promise<string | null> {
-    const res = await fetch(`/api/siswa/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      deleteSiswa(id);
-      return null;
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      await apiDeleteSiswa(numericId);
     }
-    const errBody = await res.json().catch(() => null);
-    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-      deleteSiswa(id); // data lama lokal — cukup hapus lokal
-      return null;
-    }
-    throw new Error(errBody?.error ?? 'Gagal hapus database.');
+    deleteSiswa(id); // data lama lokal — cukup hapus lokal
+    return null;
+  }
+
+  // Sinkron wali kelas ke backend (relasinya milik Kelas.waliId).
+  // mapel[] tidak ada relasinya di backend — tetap tersimpan lokal.
+  async function syncWaliKelasBackend(guruIdBackend: number, waliKelasIdLokal: string | null): Promise<void> {
+    if (!waliKelasIdLokal) return;
+    const kelasId = await resolveKelasIdBackend(waliKelasIdLokal);
+    await apiUpdateKelas(kelasId, { waliId: guruIdBackend });
+  }
+
+  // Nama mapel -> id numerik backend (harus sudah didaftarkan).
+  async function resolveMapelIds(names: string[]): Promise<number[]> {
+    if (names.length === 0) return [];
+    const daftar = await apiListMapel();
+    return names.map((n) => {
+      const match = daftar.find(
+        (m) => m.nama.toLowerCase() === n.trim().toLowerCase(),
+      );
+      if (!match) {
+        throw new Error(
+          `Mapel "${n}" belum ada di backend. Minta admin daftarkan dulu.`,
+        );
+      }
+      return match.id;
+    });
   }
 
   async function tambahGuruDB(values: { nama: string; mapel: string[]; waliKelasId: string | null }): Promise<string | null> {
     const tone = TONES[guru.length % TONES.length];
-    const res = await fetch('/api/guru', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...values, tone }),
+    const mapelIds = await resolveMapelIds(values.mapel);
+    const saved = await apiCreateGuru({
+      email: emailGuruFromNama(values.nama),
+      password: DEFAULT_AKUN_PASSWORD,
+      nama: values.nama,
+      nip: nipOtomatis(),
+      mapelIds,
     });
-    if (!res.ok) throw new Error(await bacaError(res));
-    const saved = await res.json();
-    addGuru({ ...values, tone, id: String(saved.id) });
+    const gid = saved.guru?.id ?? saved.id;
+    await syncWaliKelasBackend(gid, values.waliKelasId);
+    addGuru({ ...values, tone, id: String(gid) });
     return null;
   }
 
   async function ubahGuruDB(id: string, values: { nama: string; mapel: string[]; waliKelasId: string | null }): Promise<string | null> {
-    const res = await fetch(`/api/guru/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    });
-    if (res.ok) {
+    const mapelIds = await resolveMapelIds(values.mapel);
+    const patch = { nama: values.nama, mapelIds };
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      await apiUpdateGuru(numericId, patch);
+      await syncWaliKelasBackend(numericId, values.waliKelasId);
       updateGuru(id, values);
       return null;
     }
-    const errBody = await res.json().catch(() => null);
-    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-      const listRes = await fetch('/api/guru');
-      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
-      const match = Array.isArray(list) ? list.find((r: { nama?: string }) => r.nama === values.nama) : null;
-      if (match?.id) {
-        const resRetry = await fetch(`/api/guru/${match.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values),
-        });
-        if (!resRetry.ok) throw new Error(await bacaError(resRetry));
-        const saved = await resRetry.json().catch(() => null);
-        adopsiIdGuru(id, toGuru(saved ?? { ...match, mapel: values.mapel.join(', '), waliKelasId: values.waliKelasId }));
-        return null;
-      }
-      const resPost = await fetch('/api/guru', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, tone: TONES[guru.length % TONES.length] }),
-      });
-      if (!resPost.ok) throw new Error(await bacaError(resPost));
-      const saved = await resPost.json();
-      adopsiIdGuru(id, toGuru(saved));
+    const daftar = await apiListGuru();
+    const match = daftar.find((r) => r.nama.toLowerCase() === values.nama.trim().toLowerCase());
+    if (match?.id != null) {
+      await apiUpdateGuru(match.id, patch);
+      await syncWaliKelasBackend(match.id, values.waliKelasId);
+      adopsiIdGuru(id, { id: String(match.id), nama: values.nama, mapel: values.mapel, waliKelasId: values.waliKelasId, tone: asTone(undefined) });
       return null;
     }
-    throw new Error(errBody?.error ?? 'Gagal update database.');
+    const saved = await apiCreateGuru({
+      email: emailGuruFromNama(values.nama),
+      password: DEFAULT_AKUN_PASSWORD,
+      nama: values.nama,
+      nip: nipOtomatis(),
+      mapelIds,
+    });
+    const gid = saved.guru?.id ?? saved.id;
+    await syncWaliKelasBackend(gid, values.waliKelasId);
+    adopsiIdGuru(id, { id: String(gid), nama: values.nama, mapel: values.mapel, waliKelasId: values.waliKelasId, tone: asTone(undefined) });
+    return null;
   }
 
   async function hapusGuruDB(id: string): Promise<string | null> {
-    const res = await fetch(`/api/guru/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      deleteGuru(id);
-      return null;
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      await apiDeleteGuru(numericId);
     }
-    const errBody = await res.json().catch(() => null);
-    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-      deleteGuru(id);
-      return null;
-    }
-    throw new Error(errBody?.error ?? 'Gagal hapus database.');
+    deleteGuru(id);
+    return null;
   }
 
   async function tambahKelasDB(values: { nama: string; waliKelasId: string | null }): Promise<string | null> {
-    const res = await fetch('/api/kelas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
+    const waliId = values.waliKelasId ? await resolveGuruIdBackend(values.waliKelasId) : undefined;
+    const saved = await apiCreateKelas({
+      nama: values.nama,
+      tingkat: tingkatDariNama(values.nama),
+      ...(waliId !== undefined ? { waliId } : {}),
     });
-    if (!res.ok) throw new Error(await bacaError(res));
-    const saved = await res.json();
     addKelas({ ...values, id: String(saved.id) });
     return null;
   }
 
   async function ubahKelasDB(id: string, values: { nama: string; waliKelasId: string | null }): Promise<string | null> {
-    const res = await fetch(`/api/kelas/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    });
-    if (res.ok) {
+    const buildPatch = async () => {
+      const patch: Record<string, unknown> = {
+        nama: values.nama,
+        tingkat: tingkatDariNama(values.nama),
+      };
+      if (values.waliKelasId) {
+        patch.waliId = await resolveGuruIdBackend(values.waliKelasId);
+      } else {
+        patch.waliId = null;
+      }
+      return patch;
+    };
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      await apiUpdateKelas(numericId, await buildPatch());
       updateKelas(id, values);
       return null;
     }
-    const errBody = await res.json().catch(() => null);
-    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-      const listRes = await fetch('/api/kelas');
-      const list = listRes.ok ? await listRes.json().catch(() => null) : null;
-      const match = Array.isArray(list) ? list.find((r: { nama?: string }) => r.nama === values.nama) : null;
-      if (match?.id) {
-        const resRetry = await fetch(`/api/kelas/${match.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values),
-        });
-        if (!resRetry.ok) throw new Error(await bacaError(resRetry));
-        const saved = await resRetry.json().catch(() => null);
-        adopsiIdKelas(id, toKelas(saved ?? { ...match, ...values }));
-        return null;
-      }
-      const resPost = await fetch('/api/kelas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-      if (!resPost.ok) throw new Error(await bacaError(resPost));
-      const saved = await resPost.json();
-      adopsiIdKelas(id, toKelas(saved));
+    const daftar = await apiListKelas();
+    const match = daftar.find((r) => r.nama.toLowerCase() === values.nama.trim().toLowerCase());
+    if (match?.id != null) {
+      await apiUpdateKelas(match.id, await buildPatch());
+      adopsiIdKelas(id, { id: String(match.id), nama: values.nama, waliKelasId: values.waliKelasId });
       return null;
     }
-    throw new Error(errBody?.error ?? 'Gagal update database.');
+    const saved = await apiCreateKelas({
+      nama: values.nama,
+      tingkat: tingkatDariNama(values.nama),
+      ...(values.waliKelasId ? { waliId: await resolveGuruIdBackend(values.waliKelasId) } : {}),
+    });
+    adopsiIdKelas(id, { id: String(saved.id), nama: values.nama, waliKelasId: values.waliKelasId });
+    return null;
   }
 
   async function hapusKelasDB(id: string): Promise<string | null> {
-    const res = await fetch(`/api/kelas/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      deleteKelas(id);
-      return null;
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      await apiDeleteKelas(numericId);
     }
-    const errBody = await res.json().catch(() => null);
-    if (res.status === 404 || errBody?.code === 'NOT_FOUND') {
-      deleteKelas(id);
-      return null;
-    }
-    throw new Error(errBody?.error ?? 'Gagal hapus database.');
+    deleteKelas(id);
+    return null;
   }
 
   const handleImportClick = () => fileInputRef.current?.click();
@@ -375,44 +496,32 @@ export default function MasterDataPage() {
           nis: cell(r, 'NIS', 'nis'),
           kelasNama: cell(r, 'Kelas', 'kelas'),
         }));
-        const res = await fetch('/api/import/siswa', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows: mapped }),
-        });
-        if (!res.ok) throw new Error(await bacaError(res));
-        const data = await res.json();
+        const data = await apiImportSiswa(mapped);
         gabungKelasImpor(data.createdKelas ?? []);
         for (const s of data.created ?? []) {
-          const row = toSiswa(s);
+          const row = toSiswa({ id: s.id, nama: s.nama, nis: s.nis ?? '', kelasId: s.kelasId ?? null });
           const lokal = siswa.find((x) => x.id !== row.id && x.nis === row.nis);
           if (lokal) adopsiIdSiswa(lokal.id, row);
           else upsertSiswa(row);
         }
         setImportResult({ type: 'siswa', added: data.added, skipped: data.skipped ?? [] });
-        setDbNotice(`${data.added} siswa tersimpan di database XAMPP.`);
+        setDbNotice(`${data.added} siswa tersimpan di backend (akun: NIS@student.sysch.id / ${DEFAULT_AKUN_PASSWORD}).`);
       } else if (tab === 'guru') {
         const mapped = rows.map((r) => ({
           nama: cell(r, 'Nama', 'nama'),
           mapel: cell(r, 'Mata Pelajaran', 'mapel').split(',').map((m) => m.trim()).filter(Boolean),
           waliKelasNama: cell(r, 'Wali Kelas', 'wali kelas') || null,
         }));
-        const res = await fetch('/api/import/guru', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows: mapped }),
-        });
-        if (!res.ok) throw new Error(await bacaError(res));
-        const data = await res.json();
+        const data = await apiImportGuru(mapped);
         gabungKelasImpor(data.createdKelas ?? []);
         for (const g of data.created ?? []) {
-          const row = toGuru(g);
+          const row = toGuru({ id: g.id, nama: g.nama, mapel: g.mapel ?? '', waliKelasId: g.waliKelasId ?? null });
           const lokal = guru.find((x) => x.id !== row.id && x.nama === row.nama);
           if (lokal) adopsiIdGuru(lokal.id, row);
           else upsertGuru(row);
         }
         setImportResult({ type: 'guru', added: data.added, skipped: data.skipped ?? [] });
-        setDbNotice(`${data.added} guru tersimpan di database XAMPP.`);
+        setDbNotice(`${data.added} guru tersimpan di backend (termasuk mapel).`);
       }
     } catch (err) {
       const pesan =

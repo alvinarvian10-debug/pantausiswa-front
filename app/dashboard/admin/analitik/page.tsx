@@ -1,11 +1,19 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AnimatedCounter from '../../../../components/AnimatedCounter';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
+import {
+  apiRingkasan,
+  apiStatistikNilai,
+  apiTrenKehadiran,
+  type BackendNilai,
+  type BackendRingkasan,
+  type BackendTrenHarian,
+} from '../../../../lib/api';
 import { useAppData } from '../../../../lib/store';
 
 const HARI = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'];
@@ -13,6 +21,17 @@ const HARI = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'];
 export default function AnalitikPage() {
   const { siswa, presensi, submisi, tugas, aduan, peminjaman } = useAppData();
   const shouldReduceMotion = useReducedMotion();
+
+  // Sumber kebenaran: backend bila terjangkau, lokal bila tidak (per seksi).
+  const [beRingkasan, setBeRingkasan] = useState<BackendRingkasan | null>(null);
+  const [beTren, setBeTren] = useState<BackendTrenHarian[] | null>(null);
+  const [beNilai, setBeNilai] = useState<BackendNilai | null>(null);
+
+  useEffect(() => {
+    apiRingkasan().then(setBeRingkasan).catch(() => setBeRingkasan(null));
+    apiTrenKehadiran(7).then(setBeTren).catch(() => setBeTren(null));
+    apiStatistikNilai().then(setBeNilai).catch(() => setBeNilai(null));
+  }, []);
 
   const kehadiranPersen = useMemo(() => {
     if (presensi.length === 0) return 0;
@@ -39,12 +58,27 @@ export default function AnalitikPage() {
   }, [aduan]);
 
   // Simple synthetic weekly trend derived from current attendance rate, for visual shape.
-  const weeklyTrend = useMemo(() => {
+  const weeklyTrendLokal = useMemo(() => {
     const base = kehadiranPersen || 85;
-    return HARI.map((_, i) => Math.max(50, Math.min(100, base + [(-6), (-1), 3, 5, 0][i])));
+    return HARI.map((label, i) => ({
+      label,
+      val: Math.max(50, Math.min(100, base + [(-6), (-1), 3, 5, 0][i])),
+    }));
   }, [kehadiranPersen]);
 
-  const mapelStats = useMemo(() => {
+  const weeklyTrend = useMemo(() => {
+    if (beTren !== null) {
+      return beTren.slice(-5).map((d) => ({
+        label: new Date(`${d.tanggal}T00:00:00`).toLocaleDateString('id-ID', {
+          weekday: 'short',
+        }),
+        val: d.persentase,
+      }));
+    }
+    return weeklyTrendLokal;
+  }, [beTren, weeklyTrendLokal]);
+
+  const mapelStatsLokal = useMemo(() => {
     const map: Record<string, { total: number; count: number }> = {};
     submisi.forEach((s) => {
       if (s.status !== 'Dinilai' || s.nilai == null) return;
@@ -57,12 +91,51 @@ export default function AnalitikPage() {
     return Object.entries(map).map(([mapel, v]) => ({ mapel, rata: Math.round(v.total / v.count) }));
   }, [submisi, tugas]);
 
+  const mapelStats = useMemo(
+    () =>
+      beNilai !== null
+        ? beNilai.perMapel.map((m) => ({ mapel: m.mapel, rata: m.rata }))
+        : mapelStatsLokal,
+    [beNilai, mapelStatsLokal],
+  );
+
   const kpi = [
-    { label: 'Rata-rata Kehadiran', value: kehadiranPersen, suffix: '%', icon: 'event_available', chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
-    { label: 'Rata-rata Nilai Tugas', value: rataRataNilai, suffix: '', icon: 'grade', chip: 'bg-blue-50 text-blue-600 ring-blue-100' },
-    { label: 'Tingkat Pengumpulan Tugas', value: tingkatPengumpulan, suffix: '%', icon: 'fact_check', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
-    { label: 'Aduan Terselesaikan', value: aduanSelesaiPersen, suffix: '%', icon: 'task_alt', chip: 'bg-cyan-50 text-cyan-600 ring-cyan-100' },
+    {
+      label: beRingkasan ? 'Kehadiran Hari Ini' : 'Rata-rata Kehadiran',
+      value: beRingkasan ? beRingkasan.kehadiranHariIni.persentase : kehadiranPersen,
+      suffix: '%',
+      icon: 'event_available',
+      chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
+    },
+    {
+      label: 'Rata-rata Nilai Tugas',
+      value: beNilai ? beNilai.rataRata : rataRataNilai,
+      suffix: '',
+      icon: 'grade',
+      chip: 'bg-blue-50 text-blue-600 ring-blue-100',
+    },
+    ...(beRingkasan
+      ? [
+          { label: 'Tugas Aktif', value: beRingkasan.tugasAktif, suffix: '', icon: 'fact_check', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
+          { label: 'Aduan Baru', value: beRingkasan.aduanBaru, suffix: '', icon: 'markunread', chip: 'bg-cyan-50 text-cyan-600 ring-cyan-100' },
+        ]
+      : [
+          { label: 'Tingkat Pengumpulan Tugas', value: tingkatPengumpulan, suffix: '%', icon: 'fact_check', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
+          { label: 'Aduan Terselesaikan', value: aduanSelesaiPersen, suffix: '%', icon: 'task_alt', chip: 'bg-cyan-50 text-cyan-600 ring-cyan-100' },
+        ]),
   ];
+
+  const operasional = beRingkasan
+    ? [
+        { value: beRingkasan.totalPeminjaman, label: 'Total Transaksi Peminjaman' },
+        { value: beRingkasan.totalAduan, label: 'Total Aduan Masuk' },
+        { value: beRingkasan.totalTugas, label: 'Total Tugas Diberikan' },
+      ]
+    : [
+        { value: peminjaman.length, label: 'Total Transaksi Peminjaman' },
+        { value: aduan.length, label: 'Total Aduan Masuk' },
+        { value: tugas.length, label: 'Total Tugas Diberikan' },
+      ];
 
   return (
     <main className="mx-auto flex w-full max-w-content flex-1 flex-col gap-6 p-4 sm:p-6 md:gap-8 md:p-8">
@@ -97,12 +170,12 @@ export default function AnalitikPage() {
           <h2 className="mb-1 text-lg font-bold tracking-tight text-gray-900">Tren Kehadiran Mingguan</h2>
           <p className="mb-6 text-sm text-gray-400">Persentase siswa hadir per hari</p>
           <div className="flex h-48 items-end justify-between gap-2 overflow-x-auto sm:gap-4 md:gap-8">
-            {weeklyTrend.map((val, i) => (
-              <div key={HARI[i]} className="flex min-w-[36px] flex-1 flex-col items-center gap-2">
-                <span className="text-xs font-semibold text-gray-500">{val}%</span>
+            {weeklyTrend.map((d, i) => (
+              <div key={`${d.label}-${i}`} className="flex min-w-[36px] flex-1 flex-col items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500">{d.val}%</span>
                 <div className="flex h-36 w-full min-h-[144px] items-end overflow-hidden rounded-t-lg bg-slate-50">
                   <motion.div
-                    style={{ height: `${val}%`, width: '100%', transformOrigin: 'bottom' }}
+                    style={{ height: `${d.val}%`, width: '100%', transformOrigin: 'bottom' }}
                     initial={shouldReduceMotion ? undefined : { scaleY: 0 }}
                     whileInView={shouldReduceMotion ? undefined : { scaleY: 1 }}
                     viewport={{ once: true, margin: '-32px' }}
@@ -110,7 +183,7 @@ export default function AnalitikPage() {
                     className="w-full rounded-t-lg bg-gradient-to-t from-emerald-500 to-emerald-400"
                   />
                 </div>
-                <span className="text-xs font-medium text-gray-400">{HARI[i]}</span>
+                <span className="text-xs font-medium text-gray-400">{d.label}</span>
               </div>
             ))}
           </div>
@@ -150,18 +223,12 @@ export default function AnalitikPage() {
         <GlassCard className="p-6 md:p-8">
           <h2 className="mb-6 text-lg font-bold tracking-tight text-gray-900">Statistik Operasional</h2>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <div className="text-center">
-              <p className="text-3xl font-bold text-gray-900"><AnimatedCounter value={peminjaman.length} /></p>
-              <p className="mt-1 text-sm text-gray-500">Total Transaksi Peminjaman</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-gray-900"><AnimatedCounter value={aduan.length} /></p>
-              <p className="mt-1 text-sm text-gray-500">Total Aduan Masuk</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-gray-900"><AnimatedCounter value={tugas.length} /></p>
-              <p className="mt-1 text-sm text-gray-500">Total Tugas Diberikan</p>
-            </div>
+            {operasional.map((o) => (
+              <div key={o.label} className="text-center">
+                <p className="text-3xl font-bold text-gray-900"><AnimatedCounter value={o.value} /></p>
+                <p className="mt-1 text-sm text-gray-500">{o.label}</p>
+              </div>
+            ))}
           </div>
         </GlassCard>
       </ScrollReveal>
