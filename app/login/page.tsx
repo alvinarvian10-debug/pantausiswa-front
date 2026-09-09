@@ -6,13 +6,6 @@ import { useState } from 'react';
 import { hrefForBackendRole, loginToBackend } from '../../lib/api';
 import { roleFromBackend, setSession } from '../../lib/auth';
 
-const DEMO_ROLES = [
-  { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face', role: 'student' as const },
-  { href: '/dashboard/guru', label: 'Guru', icon: 'co_present', role: 'guru' as const },
-  { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings', role: 'admin' as const },
-  { href: '/dashboard/secretary', label: 'Sekretaris', icon: 'badge', role: 'secretary' as const },
-] as const;
-
 export default function LoginPage() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState('');
@@ -20,7 +13,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [showForgotNotice, setShowForgotNotice] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<(typeof DEMO_ROLES)[number]['role'] | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -28,25 +20,14 @@ export default function LoginPage() {
     if (saving) return;
     setError('');
 
-    if (!selectedRole) {
-      setError('Silakan pilih peran login terlebih dahulu.');
-      return;
-    }
-
     // Kredensial dicek ke backend NestJS (sysch/back) — bukan lagi Next API.
+    // Peran akun otomatis terdeteksi dari backend, tanpa perlu memilih manual.
     setSaving(true);
     try {
       const data = await loginToBackend(identifier.trim(), password);
       // Cookie HttpOnly sudah dipasang server (route /api/auth/login).
       // Cache sesi untuk UI client.
       const frontRole = roleFromBackend(data.user.role);
-      // Hormati pilihan peran demo bila masih dipilih dan cocok.
-      if (selectedRole && selectedRole !== frontRole) {
-        setError(
-          `Akun tersebut terdaftar sebagai ${data.user.role}. Pilih peran yang sesuai untuk melanjutkan.`,
-        );
-        return;
-      }
       setSession({ role: frontRole, username: data.user.email });
       router.push(hrefForBackendRole(data.user.role));
     } catch (e) {
@@ -200,48 +181,6 @@ export default function LoginPage() {
               {saving ? 'Memeriksa...' : 'Masuk'}
             </button>
           </form>
-
-          {/* Demo routing */}
-          <div className="border-t border-gray-100/80 pt-6">
-            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
-              Mode Demo — Pilih Peran
-            </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {DEMO_ROLES.map((role) => {
-                const isSelected = selectedRole === role.role;
-
-                return (
-                  <button
-                    key={role.href}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => {
-                      setSelectedRole(role.role);
-                      setError('');
-                    }}
-                    className={`group flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 shadow-sm transition-all duration-200 active:scale-95 ${
-                      isSelected
-                        ? 'border-emerald-500 bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500/20 shadow-md'
-                        : 'border-emerald-100 bg-white/60 text-emerald-700 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50'
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined icon-fill text-[22px] transition-transform duration-200 ${
-                        isSelected ? 'scale-110 text-emerald-600' : 'text-emerald-500 group-hover:scale-110'
-                      }`}
-                    >
-                      {role.icon}
-                    </span>
-                    <span className="text-xs font-semibold">{role.label}</span>
-                    {isSelected && <span className="text-[10px] font-medium text-emerald-600">Terpilih</span>}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-3 text-center text-[11px] text-gray-400">
-              Pilih peran sesuai akun sebelum menekan tombol Masuk.
-            </p>
-          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">

@@ -34,7 +34,6 @@ export default function SecretaryDashboard() {
   const myKelas = account ? getKelas(account.kelasId) : undefined;
   const members = useMemo(() => siswa.filter((s) => s.kelasId === account?.kelasId), [siswa, account?.kelasId]);
   const today = new Date().toISOString().slice(0, 10);
-  const [selectedStatus, setSelectedStatus] = useState<StatusPresensi>('Hadir');
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState('');
   const [dbError, setDbError] = useState('');
@@ -159,7 +158,7 @@ export default function SecretaryDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`mr-1 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${BADGE[label] ?? 'bg-gray-50 text-gray-500 ring-gray-100'}`}>{label}</span>
                     {STATUS.map((status) => (
-                      <button key={status} type="button" onClick={() => { setSelectedStatus(status); setAttendance(row.siswaId, status); }} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${selectedStatus === status ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500 hover:bg-gray-50'}`}>{status}</button>
+                      <button key={status} type="button" onClick={() => setAttendance(row.siswaId, status)} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${label === status ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500 hover:bg-gray-50'}`}>{status}</button>
                     ))}
                   </div>
                 </div>
@@ -180,7 +179,7 @@ export default function SecretaryDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`mr-1 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${current ? BADGE[current] : 'bg-gray-50 text-gray-500 ring-gray-100'}`}>{current ?? 'Belum dicatat'}</span>
                     {STATUS.map((status) => (
-                      <button key={status} type="button" onClick={() => { setSelectedStatus(status); setAttendance(student.id, status); }} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${selectedStatus === status ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500 hover:bg-gray-50'}`}>{status}</button>
+                      <button key={status} type="button" onClick={() => setAttendance(student.id, status)} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${current === status ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500 hover:bg-gray-50'}`}>{status}</button>
                     ))}
                   </div>
                 </div>

@@ -1,0 +1,151 @@
+npm notice run sistem-pantauan-siswa@0.1.0 dev
+npm notice run next dev
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 18.7s
+ ○ Compiling /login ...
+ ✓ Compiled /login in 30.8s (504 modules)
+ GET /login 200 in 80ms
+ GET /login 200 in 142ms
+ ○ Compiling / ...
+ ✓ Compiled / in 7.3s (1360 modules)
+ ○ Compiling /api/auth/login ...
+ ✓ Compiled /api/auth/login in 1015ms (708 modules)
+ POST /api/auth/login 200 in 3154ms
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 1550ms (119 modules)
+ ○ Compiling /dashboard/student/beranda ...
+ ✓ Compiled /dashboard/student/beranda in 1170ms (1399 modules)
+ ○ Compiling /api/be/[...path] ...
+ ✓ Compiled /api/be/[...path] in 511ms (723 modules)
+ GET /api/be/izin/me 200 in 1685ms
+ GET /api/be/peminjaman/me 200 in 1691ms
+ GET /api/be/tugas/saya 200 in 1701ms
+ GET /api/be/presensi/me 200 in 1710ms
+ GET /api/be/peminjaman/me 200 in 125ms
+ GET /api/be/izin/me 200 in 133ms
+ GET /api/be/tugas/saya 200 in 135ms
+ GET /api/be/presensi/me 200 in 138ms
+ ✓ Compiled /api/auth/logout in 375ms (725 modules)
+ POST /api/auth/logout 200 in 475ms
+ POST /api/auth/login 200 in 252ms
+ ○ Compiling /dashboard/secretary ...
+ ✓ Compiled /dashboard/secretary in 1002ms (1409 modules)
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 88ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 60ms
+ POST /api/be/presensi/catat 201 in 98ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 64ms
+ POST /api/be/presensi/catat 201 in 89ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 62ms
+ POST /api/be/presensi/catat 201 in 101ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 56ms
+ POST /api/be/presensi/catat 201 in 104ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 70ms
+ POST /api/auth/logout 200 in 29ms
+ POST /api/auth/login 401 in 213ms
+ POST /api/auth/login 200 in 258ms
+ GET /api/be/presensi/me 200 in 105ms
+ GET /api/be/izin/me 200 in 107ms
+ GET /api/be/tugas/saya 200 in 115ms
+ GET /api/be/peminjaman/me 200 in 117ms
+ GET /api/be/izin/me 200 in 77ms
+ GET /api/be/peminjaman/me 200 in 82ms
+ GET /api/be/presensi/me 200 in 90ms
+ GET /api/be/tugas/saya 200 in 92ms
+ ○ Compiling /dashboard/student/peminjaman ...
+ ✓ Compiled /dashboard/student/peminjaman in 1087ms (1411 modules)
+ GET /api/be/barang 200 in 96ms
+ GET /api/be/peminjaman/me 200 in 99ms
+ GET /api/be/barang 200 in 42ms
+ GET /api/be/peminjaman/me 200 in 52ms
+ ○ Compiling /dashboard/student/tugas ...
+ ✓ Compiled /dashboard/student/tugas in 865ms (1417 modules)
+ GET /api/be/tugas/saya 200 in 108ms
+ GET /api/be/tugas/saya 200 in 49ms
+ ○ Compiling /dashboard/student/aduan ...
+ ✓ Compiled /dashboard/student/aduan in 805ms (1421 modules)
+ GET /api/be/aduan/me 200 in 81ms
+ GET /api/be/aduan/me 200 in 46ms
+ GET /api/be/barang 200 in 81ms
+ GET /api/be/peminjaman/me 200 in 93ms
+ GET /api/be/barang 200 in 45ms
+ GET /api/be/peminjaman/me 200 in 51ms
+ GET /api/be/aduan/me 200 in 55ms
+ GET /api/be/aduan/me 200 in 56ms
+ GET /api/be/barang 200 in 102ms
+ GET /api/be/peminjaman/me 200 in 110ms
+ GET /api/be/barang 200 in 66ms
+ GET /api/be/peminjaman/me 200 in 82ms
+ ○ Compiling /api/auth/logout ...
+ ✓ Compiled /api/auth/logout in 560ms (737 modules)
+ POST /api/auth/logout 200 in 659ms
+ POST /api/auth/login 200 in 229ms
+ ○ Compiling /dashboard/admin ...
+ ✓ Compiled /dashboard/admin in 1223ms (1425 modules)
+ GET /api/be/aduan 200 in 98ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 102ms
+ GET /api/be/analitik/ringkasan 200 in 112ms
+ GET /api/be/aduan 200 in 67ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 71ms
+ GET /api/be/analitik/ringkasan 200 in 90ms
+ ○ Compiling /dashboard/admin/inventaris ...
+ ✓ Compiled /dashboard/admin/inventaris in 976ms (1431 modules)
+ GET /api/be/barang 200 in 109ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 113ms
+ GET /api/be/barang 200 in 70ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 68ms
+ PATCH /api/be/barang/3 200 in 87ms
+ GET /api/be/barang 200 in 55ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 58ms
+ PATCH /api/be/barang/3 200 in 77ms
+ GET /api/be/barang 200 in 43ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 45ms
+ ○ Compiling /dashboard/admin/analitik ...
+ ✓ Compiled /dashboard/admin/analitik in 1063ms (1429 modules)
+ GET /api/be/analitik/nilai 200 in 101ms
+ GET /api/be/analitik/ringkasan 200 in 110ms
+ GET /api/be/analitik/kehadiran-tren?days=7 200 in 128ms
+ GET /api/be/analitik/nilai 200 in 66ms
+ GET /api/be/analitik/ringkasan 200 in 58ms
+ GET /api/be/analitik/kehadiran-tren?days=7 200 in 74ms
+ ○ Compiling /dashboard/admin/pengaduan ...
+ ✓ Compiled /dashboard/admin/pengaduan in 906ms (1435 modules)
+ GET /api/be/aduan 200 in 72ms
+ GET /api/be/aduan 200 in 51ms
+ PATCH /api/be/aduan/4 200 in 100ms
+ GET /api/be/aduan 200 in 59ms
+ PATCH /api/be/aduan/2 200 in 128ms
+ GET /api/be/aduan 200 in 53ms
+ PATCH /api/be/aduan/2 200 in 91ms
+ GET /api/be/aduan 200 in 57ms
+ PATCH /api/be/aduan/2 200 in 94ms
+ GET /api/be/aduan 200 in 50ms
+ ○ Compiling /dashboard/admin/pengaturan ...
+ ✓ Compiled /dashboard/admin/pengaturan in 1282ms (1417 modules)
+ GET /api/be/password-requests?status=MENUNGGU 200 in 126ms
+ GET /api/be/pengaturan 200 in 134ms
+ GET /api/be/password-requests?status=MENUNGGU 200 in 49ms
+ GET /api/be/pengaturan 200 in 53ms
+ PATCH /api/be/pengaturan 200 in 88ms
+ ✓ Compiled /api/auth/logout in 237ms (723 modules)
+ POST /api/auth/logout 200 in 349ms
+ ✓ Compiled /api/auth/login in 454ms (725 modules)
+ POST /api/auth/login 200 in 737ms
+ ✓ Compiled /dashboard/secretary in 352ms (729 modules)
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 82ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 50ms
+ POST /api/be/presensi/catat 201 in 94ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 50ms
+ POST /api/be/presensi/catat 201 in 101ms
+ GET /api/be/presensi/rekap?tanggal=2026-09-09 200 in 63ms
+ ✓ Compiled in 1867ms (1388 modules)
+ ✓ Compiled in 973ms (1388 modules)
+ ✓ Compiled in 802ms (1388 modules)
+ ✓ Compiled in 811ms (710 modules)
+ ✓ Compiled in 669ms (710 modules)
+ ✓ Compiled in 568ms (710 modules)
+ GET /login 200 in 287ms
+ GET /login 200 in 60ms
