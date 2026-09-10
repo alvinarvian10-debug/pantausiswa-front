@@ -402,7 +402,7 @@ interface AppDataContextValue extends AppData {
     id?: string;
   }) => string;
   siklusStatusAduan: (aduanId: string) => void;
-  tanggapiAduan: (aduanId: string, tanggapan: string) => void;
+  tanggapiAduan: (aduanId: string, tanggapan: string, status?: StatusAduan) => void;
 
   tambahRiwayatGuru: (guruId: string, aksi: string, keterangan: string) => void;
   updatePengaturan: (patch: Partial<Pengaturan>) => void;
@@ -730,10 +730,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const tanggapiAduan = useCallback<AppDataContextValue['tanggapiAduan']>((aduanId, tanggapan) => {
+  const tanggapiAduan = useCallback<AppDataContextValue['tanggapiAduan']>((aduanId, tanggapan, status) => {
     setData((prev) => ({
       ...prev,
-      aduan: prev.aduan.map((a) => (a.id === aduanId ? { ...a, tanggapan } : a)),
+      aduan: prev.aduan.map((a) => (a.id === aduanId ? { ...a, tanggapan, ...(status ? { status } : {}) } : a)),
     }));
   }, []);
 

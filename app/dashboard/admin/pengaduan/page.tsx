@@ -15,10 +15,14 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const FILTERS = ['Semua', 'Fasilitas', 'Keluhan'] as const;
+const STATUS_FILTERS = ['Semua', 'Baru', 'Proses', 'Selesai'] as const;
+
+const STATUS_URUTAN: Record<string, number> = { Selesai: 0, Proses: 1, Baru: 2, Ditolak: 3 };
 
 export default function LaporanAduanPage() {
   const { aduan, getSiswa, getFasilitas, siklusStatusAduan, tanggapiAduan } = useAppData();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('Semua');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('Semua');
   const [responTarget, setResponTarget] = useState<BarisAduan | null>(null);
   const [tanggapan, setTanggapan] = useState('');
   const [dbNotice, setDbNotice] = useState('');
@@ -114,9 +118,11 @@ export default function LaporanAduanPage() {
   };
 
   const visible = useMemo(() => {
-    if (filter === 'Semua') return barisSemua;
-    return barisSemua.filter((a) => a.jenis === filter);
-  }, [barisSemua, filter]);
+    let rows = barisSemua;
+    if (filter !== 'Semua') rows = rows.filter((a) => a.jenis === filter);
+    if (statusFilter !== 'Semua') rows = rows.filter((a) => a.status === statusFilter);
+    return [...rows].sort((x, y) => (STATUS_URUTAN[x.status] ?? 9) - (STATUS_URUTAN[y.status] ?? 9));
+  }, [barisSemua, filter, statusFilter]);
 
   const stats = useMemo(() => {
     const baru = barisSemua.filter((a) => a.status === 'Baru').length;
@@ -134,12 +140,13 @@ export default function LaporanAduanPage() {
     if (!responTarget || !tanggapan.trim() || saving) return;
     const target = responTarget;
     const teks = tanggapan.trim();
+    const keluhan = target.jenis === 'Keluhan';
     setSaving(true);
     setDbError('');
     setDbNotice('');
     if (target.backendId !== null) {
       try {
-        await apiUpdateAduan(target.backendId, { tanggapan: teks });
+        await apiUpdateAduan(target.backendId, { tanggapan: teks, ...(keluhan ? { status: 'SELESAI' } : {}) });
         await muatBackend();
         setDbNotice('Tanggapan tersimpan di backend.');
       } catch (err) {
@@ -155,9 +162,9 @@ export default function LaporanAduanPage() {
       }
       return;
     }
-    tanggapiAduan(target.lokal!.id, teks);
+    tanggapiAduan(target.lokal!.id, teks, keluhan ? 'Selesai' : undefined);
     try {
-      await syncKeDB(target.lokal!, { tanggapan: teks });
+      await syncKeDB(target.lokal!, { tanggapan: teks, ...(keluhan ? { status: 'SELESAI' } : {}) });
       setDbNotice('Tanggapan tersimpan di backend.');
     } catch (err) {
       setDbError(
@@ -180,6 +187,10 @@ export default function LaporanAduanPage() {
 
   const handleStatusMaju = async (a: BarisAduan) => {
     if (saving) return;
+    if (a.jenis !== 'Fasilitas') {
+      setDbError('Keluhan selesai otomatis setelah ditanggapi — tidak bisa dimajukan manual.');
+      return;
+    }
     const next = a.status === 'Baru' ? 'Proses' : 'Selesai';
     if (a.backendId !== null) {
       setSaving(true);
@@ -221,8 +232,9 @@ export default function LaporanAduanPage() {
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">Laporan Aduan</h1>
           <p className="text-sm leading-relaxed text-gray-500">
-            Kelola aduan kerusakan fasilitas dan keluh kesah siswa. Klik badge
-            status untuk memajukan penanganan: Baru → Proses → Selesai.
+            Kelola aduan kerusakan fasilitas dan keluh kesah siswa. Fasilitas:
+            klik badge status untuk memajukan Baru → Proses → Selesai. Keluhan:
+            otomatis selesai begitu ditanggapi oleh admin.
           </p>
         </div>
       </ScrollReveal>
@@ -254,24 +266,44 @@ export default function LaporanAduanPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
-              filter === f
-                ? 'bg-emerald-600 text-white'
-                : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-sm font-semibold text-gray-500">Status:</span>
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setStatusFilter(f)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
+                statusFilter === f
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-sm font-semibold text-gray-500">Kategori:</span>
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
+                filter === f
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <StaggerGroup key={filter} as="div" className="flex flex-col gap-4">
+      <StaggerGroup key={`${filter}-${statusFilter}`} as="div" className="flex flex-col gap-4">
         {visible.map((a) => {
           return (
             <GlassCard key={a.key} className="p-6">
@@ -286,16 +318,27 @@ export default function LaporanAduanPage() {
                   </span>
                 )}
                 <span className="text-xs text-gray-400">{a.subPelapor}</span>
-                <button
-                  type="button"
-                  onClick={() => handleStatusMaju(a)}
-                  disabled={a.status === 'Selesai'}
-                  title={a.status === 'Selesai' ? 'Sudah selesai' : 'Klik untuk memajukan status'}
-                  className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition-transform active:scale-95 ${STATUS_STYLE[a.status]} ${a.status !== 'Selesai' ? 'cursor-pointer hover:brightness-95' : 'cursor-default'}`}
-                >
-                  {a.status}
-                  {a.status !== 'Selesai' && <span className="material-symbols-outlined text-[14px]">arrow_forward</span>}
-                </button>
+                {(() => {
+                  const bisaMaju = a.jenis === 'Fasilitas' && a.status !== 'Selesai';
+                  const judulBadge =
+                    a.jenis === 'Keluhan'
+                      ? 'Keluhan selesai otomatis setelah ditanggapi'
+                      : a.status === 'Selesai'
+                        ? 'Sudah selesai'
+                        : 'Klik untuk memajukan status';
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleStatusMaju(a)}
+                      disabled={!bisaMaju}
+                      title={judulBadge}
+                      className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition-transform ${STATUS_STYLE[a.status]} ${bisaMaju ? 'cursor-pointer hover:brightness-95 active:scale-95' : 'cursor-default'}`}
+                    >
+                      {a.status}
+                      {bisaMaju && <span className="material-symbols-outlined text-[14px]">arrow_forward</span>}
+                    </button>
+                  );
+                })()}
               </div>
               <h3 className="text-base font-semibold text-gray-900">{a.judul}</h3>
               {a.fasilitasNama && (
