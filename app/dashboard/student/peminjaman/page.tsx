@@ -28,13 +28,30 @@ const KONDISI_STYLE: Record<string, string> = {
   Diperbaiki: 'bg-amber-50 text-amber-600 ring-amber-100',
 };
 
+/** "2026-09-10 08:00" → "2026-09-11 15:00" (jam boleh kosong utk data lama). */
+function labelPeriode(
+  tglMulai: string,
+  jamMulai: string | null,
+  tglSelesai: string,
+  jamSelesai: string | null,
+): string {
+  const mulai = `${tglMulai.slice(0, 10)}${jamMulai ? ` ${jamMulai}` : ''}`;
+  const selesai = `${tglSelesai.slice(0, 10)}${jamSelesai ? ` ${jamSelesai}` : ''}`;
+  return `${mulai} → ${selesai}`;
+}
+
 export default function PeminjamanPage() {
   const { fasilitas, peminjaman, getFasilitas, ajukanPeminjaman, kembalikanPeminjaman } = useAppData();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('Semua');
   const [pickedFasilitas, setPickedFasilitas] = useState<FasilitasView | null>(null);
   const [keperluan, setKeperluan] = useState('');
-  const [jamKembali, setJamKembali] = useState('16:00');
+  const [tanggalPinjam, setTanggalPinjam] = useState(new Date().toISOString().slice(0, 10));
+  const [jamPinjam, setJamPinjam] = useState('08:00');
+  const [jamKembali, setJamKembali] = useState('15:00');
+  const [tanggalKembali, setTanggalKembali] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10);
+  });
   const [dbNotice, setDbNotice] = useState('');
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -46,8 +63,8 @@ export default function PeminjamanPage() {
   const muatBackend = async () => {
     try {
       const [b, p] = await Promise.all([apiListBarang(), apiMyPeminjaman()]);
-      setBeBarang(b);
-      setBePinjam(p.data);
+      setBeBarang(b.length > 0 ? b : null);
+      setBePinjam(p.data.length > 0 ? p.data : null);
     } catch {
       setBeBarang(null);
       setBePinjam(null);
@@ -79,7 +96,11 @@ export default function PeminjamanPage() {
         icon: b.icon ?? 'inventory_2',
         jumlahTotal: b.jumlahTotal,
         jumlahTersedia: b.jumlahTersedia,
-        kondisi: b.kondisi === 'BAIK' ? 'Baik' : 'Rusak',
+        kondisi: b.kondisi === 'BAIK'
+          ? 'Baik'
+          : b.kondisi === 'RUSAK_RINGAN'
+            ? 'Diperbaiki'
+            : 'Rusak',
       }));
     }
     return fasilitas.map((f) => ({
@@ -114,7 +135,7 @@ export default function PeminjamanPage() {
           nama: p.barang?.nama ?? '-',
           icon: p.barang?.icon ?? 'inventory_2',
           keperluan: p.catatan ?? '',
-          batasLabel: `Kembali: ${p.tanggalKembali.slice(0, 10)}`,
+          batasLabel: labelPeriode(p.tanggalPinjam, p.jamPinjam, p.tanggalKembali, p.jamKembali),
           loanIdLokal: null,
         }));
     }
@@ -128,7 +149,37 @@ export default function PeminjamanPage() {
           nama: f?.nama ?? '-',
           icon: f?.icon ?? 'inventory_2',
           keperluan: p.keperluan,
-          batasLabel: `Batas: ${p.batasKembali.slice(11, 16)} WIB`,
+          batasLabel: labelPeriode(p.tanggalPinjam, null, p.batasKembali, null),
+          loanIdLokal: p.id,
+        };
+      });
+  }, [bePinjam, peminjaman, getFasilitas]);
+
+  const pendingLoans: PinjamanView[] = useMemo(() => {
+    if (bePinjam !== null) {
+      return bePinjam
+        .filter((p) => p.status === 'MENUNGGU')
+        .map((p) => ({
+          key: `be-pending-${p.id}`,
+          backendId: p.id,
+          nama: p.barang?.nama ?? '-',
+          icon: p.barang?.icon ?? 'inventory_2',
+          keperluan: p.catatan ?? '',
+          batasLabel: labelPeriode(p.tanggalPinjam, p.jamPinjam, p.tanggalKembali, p.jamKembali),
+          loanIdLokal: null,
+        }));
+    }
+    return peminjaman
+      .filter((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Diajukan')
+      .map((p) => {
+        const f = getFasilitas(p.fasilitasId);
+        return {
+          key: `lokal-pending-${p.id}`,
+          backendId: null,
+          nama: f?.nama ?? '-',
+          icon: f?.icon ?? 'inventory_2',
+          keperluan: p.keperluan,
+          batasLabel: labelPeriode(p.tanggalPinjam, null, p.batasKembali, null),
           loanIdLokal: p.id,
         };
       });
@@ -147,12 +198,9 @@ export default function PeminjamanPage() {
     e.preventDefault();
     if (!pickedFasilitas || !keperluan.trim() || saving) return;
     const fasilitasDipilih = pickedFasilitas;
-    const today = new Date().toISOString().slice(0, 10);
     setSaving(true);
     setDbError('');
     setDbNotice('');
-    // Stok adalah kebenaran backend: POST dulu (stok berkurang saat admin
-    // APPROVE). Baris backend bawa id numerik; baris lokal dicocokkan nama.
     try {
       let barangId = fasilitasDipilih.backendId;
       if (barangId === null) {
@@ -169,23 +217,29 @@ export default function PeminjamanPage() {
       }
       await apiCreatePeminjaman({
         barangId,
-        tanggalKembali: today,
-        catatan: `${keperluan.trim()} (batas ${jamKembali} WIB)`,
+        tanggalKembali,
+        jamPinjam,
+        jamKembali,
+        catatan: `[${tanggalPinjam} ${jamPinjam} s/d ${tanggalKembali} ${jamKembali}] ${keperluan.trim()}`,
       });
-      // Cache lokal hanya untuk baris lokal (baris backend tak ada di store).
       const asalLokal = fasilitas.find((f) => `lokal-${f.id}` === fasilitasDipilih.key);
       if (asalLokal) {
         ajukanPeminjaman({
           siswaId: CURRENT_SISWA_ID,
           fasilitasId: asalLokal.id,
           keperluan: keperluan.trim(),
-          batasKembali: `${today}T${jamKembali}:00`,
+          batasKembali: `${tanggalKembali}T23:59:59`,
         });
       }
       await muatBackend();
-      setDbNotice(`Pengajuan "${fasilitasDipilih.nama}" tercatat di backend (menunggu persetujuan admin).`);
+      setDbNotice(`Pengajuan "${fasilitasDipilih.nama}" tercatat (menunggu persetujuan admin). Stok akan berkurang setelah disetujui.`);
       setPickedFasilitas(null);
       setKeperluan('');
+      setTanggalPinjam(new Date().toISOString().slice(0, 10));
+      setJamPinjam('08:00');
+      setJamKembali('15:00');
+      const next = new Date(); next.setDate(next.getDate() + 1);
+      setTanggalKembali(next.toISOString().slice(0, 10));
     } catch (err) {
       setDbError(
         err instanceof Error ? err.message : 'Gagal menyimpan ke backend.',
@@ -226,9 +280,8 @@ export default function PeminjamanPage() {
             Peminjaman Fasilitas
           </h1>
           <p className="text-sm leading-relaxed text-gray-500">
-            Pinjam ruangan, peralatan elektronik, dan fasilitas olahraga
-            sekolah — stok tersedia diperbarui langsung ke bagian inventaris
-            admin.
+            Pinjam ruangan, peralatan elektronik, dan fasilitas olahraga sekolah.
+            Stok hanya berkurang setelah admin menyetujui permohonan Anda.
           </p>
         </div>
       </ScrollReveal>
@@ -244,6 +297,41 @@ export default function PeminjamanPage() {
           <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
           {dbError}
         </div>
+      )}
+
+      {pendingLoans.length > 0 && (
+        <ScrollReveal delay={0.04}>
+          <section className="flex flex-col gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-500">
+              Menunggu Persetujuan ({pendingLoans.length})
+            </h2>
+            {pendingLoans.map((loan) => (
+              <GlassCard
+                key={loan.key}
+                className="flex flex-col gap-4 border border-amber-200 bg-amber-50/50 p-5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 ring-1 ring-inset ring-amber-100">
+                    <span className="material-symbols-outlined icon-fill text-[26px]">{loan.icon}</span>
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{loan.nama}</span>
+                    <span className="text-xs font-medium text-gray-500">{loan.keperluan}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-amber-700 ring-1 ring-inset ring-amber-200">
+                    <span className="material-symbols-outlined icon-fill text-[18px] text-amber-500">hourglass_top</span>
+                    {loan.batasLabel}
+                  </span>
+                  <span className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700">
+                    Menunggu
+                  </span>
+                </div>
+              </GlassCard>
+            ))}
+          </section>
+        </ScrollReveal>
       )}
 
       {myLoans.length > 0 && (
@@ -266,7 +354,7 @@ export default function PeminjamanPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-gray-900 ring-1 ring-inset ring-emerald-100">
-                      <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-600">schedule</span>
+                      <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-600">date_range</span>
                       {loan.batasLabel}
                     </span>
                     <button
@@ -367,6 +455,9 @@ export default function PeminjamanPage() {
             <h2 className="text-lg font-semibold text-gray-900">
               Ajukan Pinjaman: {pickedFasilitas.nama}
             </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Stok barang tidak berkurang saat diajukan. Stok hanya berkurang setelah admin menyetujui.
+            </p>
             <form className="mt-5 flex flex-col gap-4" onSubmit={handleAjukan}>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-gray-700">Keperluan</label>
@@ -380,13 +471,49 @@ export default function PeminjamanPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Batas Waktu Kembali</label>
-                <input
-                  type="time"
-                  value={jamKembali}
-                  onChange={(e) => setJamKembali(e.target.value)}
-                  className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                />
+                <label className="text-sm font-medium text-gray-700">Tanggal &amp; Jam Mulai Pinjam</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={tanggalPinjam}
+                    onChange={(e) => setTanggalPinjam(e.target.value)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    required
+                    className="flex-1 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <input
+                    type="time"
+                    value={jamPinjam}
+                    onChange={(e) => setJamPinjam(e.target.value)}
+                    required
+                    className="w-28 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+                <p className="text-xs text-gray-400">Mulai kapan (tanggal &amp; jam) barang ini Anda butuhkan.</p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">Batas Tanggal &amp; Jam Pengembalian</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={tanggalKembali}
+                    onChange={(e) => setTanggalKembali(e.target.value)}
+                    min={tanggalPinjam}
+                    required
+                    className="flex-1 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <input
+                    type="time"
+                    value={jamKembali}
+                    onChange={(e) => setJamKembali(e.target.value)}
+                    required
+                    className="w-28 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+                <p className="text-xs text-gray-400">Kapan barang harus dikembalikan (tanggal &amp; jam). Lewat batas = keterlambatan.</p>
+              </div>
+              <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700 ring-1 ring-inset ring-blue-100">
+                <span className="font-semibold">Periode pinjam:</span> {tanggalPinjam} {jamPinjam} &rarr; {tanggalKembali} {jamKembali}
               </div>
               <div className="flex gap-3">
                 <button
@@ -398,10 +525,10 @@ export default function PeminjamanPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || !keperluan.trim() || tanggalKembali < tanggalPinjam || (tanggalKembali === tanggalPinjam && jamKembali <= jamPinjam)}
                   className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
                 >
-                  {saving ? 'Memproses...' : 'Konfirmasi Pinjam'}
+                  {saving ? 'Memproses...' : 'Ajukan Pinjaman'}
                 </button>
               </div>
             </form>

@@ -98,7 +98,7 @@ export default function StudentDashboard() {
         icon: 'inventory_2',
         nama: loan.barang?.nama ?? '-',
         keperluan: loan.catatan ?? '',
-        batasLabel: loan.tanggalKembali.slice(0, 10),
+        batasLabel: `${loan.tanggalKembali.slice(0, 10)}${loan.jamKembali ? ` ${loan.jamKembali}` : ''}`,
       };
     }
     const loan = peminjaman.find((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam');
@@ -107,7 +107,7 @@ export default function StudentDashboard() {
       icon: getFasilitas(loan.fasilitasId)?.icon ?? 'inventory_2',
       nama: getFasilitas(loan.fasilitasId)?.nama ?? '-',
       keperluan: loan.keperluan,
-      batasLabel: `${loan.batasKembali.slice(11, 16)} WIB`,
+      batasLabel: `${loan.batasKembali.slice(0, 10)} ${loan.batasKembali.slice(11, 16)}`,
     };
   }, [bePinjam, peminjaman, getFasilitas]);
 

@@ -456,6 +456,8 @@ export interface BackendPeminjaman {
   jumlah: number;
   tanggalPinjam: string;
   tanggalKembali: string;
+  jamPinjam: string | null;
+  jamKembali: string | null;
   status: BackendStatusPeminjaman;
   catatan: string | null;
   barang?: BackendBarang;
@@ -470,11 +472,18 @@ export function apiCreatePeminjaman(input: {
   barangId: number;
   jumlah?: number;
   tanggalKembali: string;
+  jamPinjam?: string;
+  jamKembali?: string;
   catatan?: string;
 }) {
   return apiFetch<BackendPeminjaman>('/peminjaman', {
     method: 'POST',
-    body: JSON.stringify({ jumlah: 1, ...input }),
+    body: JSON.stringify({
+      jumlah: 1,
+      ...(input.jamPinjam ? { jamPinjam: input.jamPinjam } : {}),
+      ...(input.jamKembali ? { jamKembali: input.jamKembali } : {}),
+      ...input,
+    }),
   });
 }
 
@@ -493,6 +502,25 @@ export function apiListPeminjaman(status?: string) {
 export function apiKembalikanMandiri(id: number) {
   return apiFetch<BackendPeminjaman>(`/peminjaman/${id}/kembalikan`, {
     method: 'POST',
+  });
+}
+
+/** Admin menyetujui/menolak pengajuan peminjaman. */
+export function apiReviewPeminjaman(
+  id: number,
+  aksi: 'APPROVE' | 'REJECT',
+  catatan?: string,
+) {
+  return apiFetch<BackendPeminjaman>(`/peminjaman/${id}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify(catatan ? { aksi, catatan } : { aksi }),
+  });
+}
+
+/** Admin menandai barang sudah dikembalikan. */
+export function apiAdminKembalikan(id: number) {
+  return apiFetch<BackendPeminjaman>(`/peminjaman/${id}/kembalikan`, {
+    method: 'PATCH',
   });
 }
 

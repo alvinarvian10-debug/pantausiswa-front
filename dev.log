@@ -1,0 +1,109 @@
+npm notice run sistem-pantauan-siswa@0.1.0 dev
+npm notice run next dev
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 4.5s
+ ○ Compiling /login ...
+ ✓ Compiled /login in 6.9s (504 modules)
+ GET /login 200 in 7270ms
+ GET /login 200 in 90ms
+ ○ Compiling /api/auth/login ...
+ ✓ Compiled /api/auth/login in 564ms (275 modules)
+ POST /api/auth/login 200 in 2500ms
+ ✓ Compiled /middleware in 412ms (119 modules)
+ ○ Compiling /dashboard/student/beranda ...
+ ✓ Compiled /dashboard/student/beranda in 5.5s (1369 modules)
+ ✓ Compiled in 1072ms (676 modules)
+ ✓ Compiled /api/be/[...path] in 312ms (695 modules)
+ GET /api/be/auth/me 200 in 1340ms
+ GET /api/be/izin/me 200 in 1329ms
+ GET /api/be/peminjaman/me 200 in 1337ms
+ GET /api/be/tugas/saya 200 in 1344ms
+ GET /api/be/presensi/me 200 in 1364ms
+ GET /api/be/auth/me 200 in 96ms
+ GET /api/be/izin/me 200 in 101ms
+ GET /api/be/peminjaman/me 200 in 106ms
+ GET /api/be/tugas/saya 200 in 110ms
+ GET /api/be/presensi/me 200 in 113ms
+ GET /api/be/auth/me 200 in 52ms
+ GET /api/be/auth/me 200 in 25ms
+ ○ Compiling /dashboard/student/peminjaman ...
+ ✓ Compiled /dashboard/student/peminjaman in 704ms (1377 modules)
+ GET /api/be/barang 200 in 64ms
+ GET /api/be/peminjaman/me 200 in 75ms
+ GET /api/be/barang 200 in 44ms
+ GET /api/be/peminjaman/me 200 in 45ms
+ ✓ Compiled /api/auth/logout in 280ms (701 modules)
+ POST /api/auth/logout 200 in 361ms
+ POST /api/auth/login 200 in 190ms
+ ○ Compiling /dashboard/admin ...
+ ✓ Compiled /dashboard/admin in 1272ms (1383 modules)
+ ✓ Compiled /api/be/[...path] in 311ms (704 modules)
+ GET /api/be/auth/me 200 in 516ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 507ms
+ GET /api/be/aduan 200 in 517ms
+ GET /api/be/analitik/ringkasan 200 in 530ms
+ GET /api/be/auth/me 200 in 89ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 94ms
+ GET /api/be/aduan 200 in 99ms
+ GET /api/be/analitik/ringkasan 200 in 88ms
+ GET /api/be/auth/me 200 in 49ms
+ GET /api/be/auth/me 200 in 37ms
+ ○ Compiling /dashboard/admin/inventaris ...
+ ✓ Compiled /dashboard/admin/inventaris in 657ms (1377 modules)
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 90ms
+ GET /api/be/barang 200 in 91ms
+ GET /api/be/peminjaman?status=MENUNGGU 200 in 99ms
+ GET /api/be/barang 200 in 54ms
+ GET /api/be/peminjaman?status=DIPINJAM 200 in 62ms
+ GET /api/be/peminjaman?status=MENUNGGU 200 in 65ms
+ ✓ Compiled /api/auth/logout in 284ms (710 modules)
+ POST /api/auth/logout 200 in 353ms
+ POST /api/auth/login 200 in 188ms
+ GET /api/be/auth/me 200 in 92ms
+ GET /api/be/presensi/me 200 in 101ms
+ GET /api/be/izin/me 200 in 120ms
+ GET /api/be/peminjaman/me 200 in 127ms
+ GET /api/be/tugas/saya 200 in 135ms
+ GET /api/be/auth/me 200 in 108ms
+ GET /api/be/presensi/me 200 in 107ms
+ GET /api/be/izin/me 200 in 95ms
+ GET /api/be/peminjaman/me 200 in 92ms
+ GET /api/be/tugas/saya 200 in 95ms
+ GET /api/be/auth/me 200 in 78ms
+ GET /api/be/auth/me 200 in 36ms
+ POST /api/auth/logout 200 in 19ms
+ POST /api/auth/login 200 in 183ms
+ GET /api/be/auth/me 200 in 75ms
+ GET /api/be/presensi/me 200 in 97ms
+ GET /api/be/tugas/saya 200 in 108ms
+ GET /api/be/izin/me 200 in 118ms
+ GET /api/be/peminjaman/me 200 in 124ms
+ GET /api/be/auth/me 200 in 86ms
+ GET /api/be/presensi/me 200 in 88ms
+ GET /api/be/tugas/saya 200 in 92ms
+ GET /api/be/izin/me 200 in 85ms
+ GET /api/be/peminjaman/me 200 in 87ms
+ GET /api/be/auth/me 200 in 62ms
+ GET /api/be/auth/me 200 in 28ms
+ POST /api/auth/logout 200 in 19ms
+ POST /api/auth/login 200 in 166ms
+ GET /api/be/auth/me 200 in 75ms
+ GET /api/be/presensi/me 200 in 66ms
+ GET /api/be/tugas/saya 200 in 105ms
+ GET /api/be/izin/me 200 in 113ms
+ GET /api/be/peminjaman/me 200 in 115ms
+ GET /api/be/auth/me 200 in 95ms
+ GET /api/be/presensi/me 200 in 102ms
+ GET /api/be/izin/me 200 in 88ms
+ GET /api/be/peminjaman/me 200 in 95ms
+ GET /api/be/tugas/saya 200 in 100ms
+ GET /api/be/auth/me 200 in 57ms
+ GET /api/be/auth/me 200 in 36ms
+ GET /api/be/barang 200 in 49ms
+ GET /api/be/peminjaman/me 200 in 56ms
+ GET /api/be/barang 200 in 44ms
+ GET /api/be/peminjaman/me 200 in 43ms

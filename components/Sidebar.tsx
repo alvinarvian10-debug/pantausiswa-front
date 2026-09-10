@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import { CURRENT_GURU_ID, CURRENT_SISWA_ID, CURRENT_SEKRETARIS_ID, useAppData } from '../lib/store';
 import { clearSession } from '../lib/auth';
+import { apiMe, type BackendUser } from '../lib/api';
 
 export type Role = 'student' | 'guru' | 'admin' | 'secretary';
 
@@ -122,7 +124,17 @@ const NAV_CONFIG: Record<Role, RoleConfig> = {
 
 export function useRoleUser(role: Role): { name: string; subtitle: string } {
   const { getSiswa, getGuru, getKelas, sekretaris } = useAppData();
+  const [me, setMe] = useState<BackendUser | null>(null);
+
+  useEffect(() => {
+    apiMe()
+      .then(setMe)
+      .catch(() => {});
+  }, []);
+
   if (role === 'student') {
+    // Prefer backend user name (real login account) over hardcoded local store
+    if (me) return { name: me.nama, subtitle: '' };
     const s = getSiswa(CURRENT_SISWA_ID);
     const kelas = s ? getKelas(s.kelasId) : undefined;
     return { name: s?.nama ?? 'Siswa', subtitle: kelas?.nama ?? '-' };
@@ -140,11 +152,16 @@ export function useRoleUser(role: Role): { name: string; subtitle: string } {
     return { name: account?.nama ?? 'Sekretaris Kelas', subtitle: kelas?.nama ?? '-' };
   }
   if (role === 'guru') {
+    if (me) {
+      const g = getGuru(CURRENT_GURU_ID);
+      const kelas = g?.waliKelasId ? getKelas(g.waliKelasId) : undefined;
+      return { name: me.nama, subtitle: kelas ? `Wali Kelas ${kelas.nama}` : (g?.mapel.join(', ') ?? '-') };
+    }
     const g = getGuru(CURRENT_GURU_ID);
     const kelas = g?.waliKelasId ? getKelas(g.waliKelasId) : undefined;
     return { name: g?.nama ?? 'Guru', subtitle: kelas ? `Wali Kelas ${kelas.nama}` : (g?.mapel.join(', ') ?? '-') };
   }
-  return { name: 'Admin Sekolah', subtitle: 'Administrator Sekolah' };
+  return { name: me?.nama ?? 'Admin Sekolah', subtitle: 'Administrator Sekolah' };
 }
 
 interface SidebarProps {

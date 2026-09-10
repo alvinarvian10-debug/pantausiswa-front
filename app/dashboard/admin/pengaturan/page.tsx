@@ -37,8 +37,6 @@ export default function PengaturanPage() {
           kepalaSekolah: cfg.kepalaSekolah ?? '',
           jamMasuk: cfg.jamMasuk,
           batasToleransi: cfg.batasToleransi,
-          notifikasiWA: cfg.notifikasiWA,
-          notifikasiEmail: cfg.notifikasiEmail,
         })),
       )
       .catch((err: unknown) =>
@@ -105,8 +103,6 @@ export default function PengaturanPage() {
         kepalaSekolah: form.kepalaSekolah,
         jamMasuk: form.jamMasuk,
         batasToleransi: form.batasToleransi,
-        notifikasiWA: form.notifikasiWA,
-        notifikasiEmail: form.notifikasiEmail,
       });
       updatePengaturan(form);
       setSaved(true);
@@ -263,7 +259,7 @@ export default function PengaturanPage() {
           <GlassCard className="p-6">
             <h2 className="mb-5 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <span className="material-symbols-outlined icon-fill text-emerald-600">tune</span>
-              Preferensi Presensi &amp; Notifikasi
+              Preferensi Presensi
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
@@ -285,26 +281,6 @@ export default function PengaturanPage() {
                   className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
-            </div>
-            <div className="mt-5 flex flex-col gap-3">
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-                <span className="text-sm font-medium text-gray-700">Notifikasi WhatsApp ke Orang Tua</span>
-                <input
-                  type="checkbox"
-                  checked={form.notifikasiWA}
-                  onChange={(e) => setForm((f) => ({ ...f, notifikasiWA: e.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-              </label>
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-                <span className="text-sm font-medium text-gray-700">Notifikasi Email</span>
-                <input
-                  type="checkbox"
-                  checked={form.notifikasiEmail}
-                  onChange={(e) => setForm((f) => ({ ...f, notifikasiEmail: e.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-              </label>
             </div>
           </GlassCard>
         </ScrollReveal>

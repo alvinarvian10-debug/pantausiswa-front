@@ -9,6 +9,8 @@ import {
   apiListBarang,
   apiListPeminjaman,
   apiUpdateBarang,
+  apiReviewPeminjaman,
+  apiAdminKembalikan,
   type BackendBarang,
   type BackendPeminjaman,
 } from '../../../../lib/api';
@@ -21,6 +23,18 @@ const KONDISI_STYLE: Record<KondisiFasilitas, string> = {
 };
 
 const ICON_OPTIONS = ['inventory_2', 'videocam', 'computer', 'sports_basketball', 'meeting_room', 'speaker', 'sports_volleyball', 'mic', 'ac_unit', 'print'];
+
+/** "2026-09-10 08:00" → "2026-09-11 15:00" (jam boleh kosong utk data lama). */
+function labelPeriode(
+  tglMulai: string,
+  jamMulai: string | null,
+  tglSelesai: string,
+  jamSelesai: string | null,
+): string {
+  const mulai = `${tglMulai.slice(0, 10)}${jamMulai ? ` ${jamMulai}` : ''}`;
+  const selesai = `${tglSelesai.slice(0, 10)}${jamSelesai ? ` ${jamSelesai}` : ''}`;
+  return `${mulai} → ${selesai}`;
+}
 
 export default function InventarisPage() {
   const { fasilitas, peminjaman, tambahFasilitas, updateKondisiFasilitas, getSiswa } = useAppData();
@@ -35,18 +49,23 @@ export default function InventarisPage() {
   // Sumber kebenaran: backend bila terjangkau, lokal bila tidak.
   const [beBarang, setBeBarang] = useState<BackendBarang[] | null>(null);
   const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
+  const [beMenunggu, setBeMenunggu] = useState<BackendPeminjaman[] | null>(null);
+  const [reviewingId, setReviewingId] = useState<number | null>(null);
 
   const muatBackend = async () => {
     try {
-      const [b, p] = await Promise.all([
+      const [b, pDipinjam, pMenunggu] = await Promise.all([
         apiListBarang(),
         apiListPeminjaman('DIPINJAM'),
+        apiListPeminjaman('MENUNGGU'),
       ]);
-      setBeBarang(b);
-      setBePinjam(p.data);
+      setBeBarang(b.length > 0 ? b : null);
+      setBePinjam(pDipinjam.data.length > 0 ? pDipinjam.data : null);
+      setBeMenunggu(pMenunggu.data.length > 0 ? pMenunggu.data : null);
     } catch {
       setBeBarang(null);
       setBePinjam(null);
+      setBeMenunggu(null);
     }
   };
 
@@ -77,7 +96,11 @@ export default function InventarisPage() {
         icon: b.icon ?? 'inventory_2',
         jumlahTotal: b.jumlahTotal,
         jumlahTersedia: b.jumlahTersedia,
-        kondisi: (b.kondisi === 'BAIK' ? 'Baik' : 'Rusak') as KondisiFasilitas,
+        kondisi: b.kondisi === 'BAIK'
+          ? 'Baik'
+          : b.kondisi === 'RUSAK_RINGAN'
+            ? 'Diperbaiki'
+            : 'Rusak',
       }));
     }
     return fasilitas.map((f) => ({
@@ -129,23 +152,60 @@ export default function InventarisPage() {
     }
   };
 
+  const handleReviewPeminjaman = async (id: number, aksi: 'APPROVE' | 'REJECT') => {
+    setDbError('');
+    setDbNotice('');
+    setReviewingId(id);
+    try {
+      await apiReviewPeminjaman(id, aksi);
+      await muatBackend();
+      setDbNotice(aksi === 'APPROVE' ? 'Peminjaman disetujui. Stok barang berkurang.' : 'Peminjaman ditolak.');
+    } catch (err) {
+      setDbError(
+        err instanceof Error ? `Gagal: ${err.message}` : 'Gagal memproses peminjaman.',
+      );
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
+  const handleKembalikanAdmin = async (id: number) => {
+    setDbError('');
+    setDbNotice('');
+    setReviewingId(id);
+    try {
+      await apiAdminKembalikan(id);
+      await muatBackend();
+      setDbNotice('Barang berhasil dikembalikan. Stok bertambah.');
+    } catch (err) {
+      setDbError(
+        err instanceof Error ? `Gagal: ${err.message}` : 'Gagal mengembalikan barang.',
+      );
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
   const stats = useMemo(() => {
     const total = daftarBarang.reduce((sum, f) => sum + f.jumlahTotal, 0);
     const dipinjam = bePinjam !== null
       ? bePinjam.length
       : peminjaman.filter((p) => p.status === 'Dipinjam').length;
+    const menunggu = beMenunggu !== null ? beMenunggu.length : 0;
     const rusak = daftarBarang.filter((f) => f.kondisi === 'Rusak').length;
     const diperbaiki = daftarBarang.filter((f) => f.kondisi === 'Diperbaiki').length;
     return [
       { label: 'Total Unit', count: total, icon: 'inventory_2', chip: 'bg-blue-50 text-blue-600 ring-blue-100' },
       { label: 'Sedang Dipinjam', count: dipinjam, icon: 'front_hand', chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
+      { label: 'Menunggu', count: menunggu, icon: 'pending', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
       { label: 'Rusak', count: rusak, icon: 'build', chip: 'bg-red-50 text-red-600 ring-red-100' },
       { label: 'Diperbaiki', count: diperbaiki, icon: 'handyman', chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
     ];
-  }, [daftarBarang, bePinjam, peminjaman]);
+  }, [daftarBarang, bePinjam, beMenunggu, peminjaman]);
 
   interface PinjamanAktifView {
     key: string;
+    backendId: number | null;
     barangNama: string;
     peminjam: string;
     detail: string;
@@ -155,9 +215,10 @@ export default function InventarisPage() {
     if (bePinjam !== null) {
       return bePinjam.map((p) => ({
         key: `be-${p.id}`,
+        backendId: p.id,
         barangNama: p.barang?.nama ?? '-',
         peminjam: p.siswa?.user?.nama ?? '-',
-        detail: `${p.catatan ?? ''} · Kembali: ${p.tanggalKembali.slice(0, 10)}`,
+        detail: `${p.catatan ?? ''} · ${labelPeriode(p.tanggalPinjam, p.jamPinjam, p.tanggalKembali, p.jamKembali)}`,
       }));
     }
     return peminjaman
@@ -167,9 +228,10 @@ export default function InventarisPage() {
         const s = getSiswa(p.siswaId);
         return {
           key: `lokal-${p.id}`,
+          backendId: null,
           barangNama: f?.nama ?? '-',
           peminjam: s?.nama ?? '-',
-          detail: `${p.keperluan} · Batas: ${p.batasKembali.slice(11, 16)} WIB`,
+          detail: `${p.keperluan} · ${p.tanggalPinjam} → ${p.batasKembali.slice(0, 10)}`,
         };
       });
   }, [bePinjam, peminjaman, fasilitas, getSiswa]);
@@ -233,7 +295,7 @@ export default function InventarisPage() {
         </div>
       </ScrollReveal>
 
-      <StaggerGroup as="div" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <StaggerGroup as="div" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((s) => (
           <GlassCard key={s.label} className="flex items-center gap-4 p-6">
             <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${s.chip}`}>
@@ -329,10 +391,71 @@ export default function InventarisPage() {
                     <p className="text-sm font-medium text-gray-900">
                       {p.barangNama} — dipinjam oleh <span className="font-semibold">{p.peminjam}</span>
                     </p>
-                    <p className="text-xs text-gray-500">{p.detail}</p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500">{p.detail}</p>
+                      {p.backendId !== null && (
+                        <button
+                          type="button"
+                          disabled={reviewingId === p.backendId}
+                          onClick={() => handleKembalikanAdmin(p.backendId!)}
+                          className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+                        >
+                          {reviewingId === p.backendId ? 'Proses...' : 'Tandai Dikembalikan'}
+                        </button>
+                      )}
+                    </div>
                   </GlassCard>
                 );
               })}
+            </div>
+          </section>
+        </ScrollReveal>
+      )}
+
+      {beMenunggu !== null && beMenunggu.length > 0 && (
+        <ScrollReveal delay={0.08}>
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-500">
+              Permohonan Menunggu Persetujuan ({beMenunggu.length})
+            </h2>
+            <div className="flex flex-col gap-3">
+              {beMenunggu.map((p) => (
+                <GlassCard
+                  key={`mw-${p.id}`}
+                  className="flex flex-col gap-3 border border-amber-200 bg-amber-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {p.barang?.nama ?? '-'} — {p.siswa?.user?.nama ?? 'Siswa'}
+                      {p.siswa?.kelas?.nama ? ` (${p.siswa.kelas.nama})` : ''}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {p.catatan ?? '-'}
+                    </p>
+                    <p className="text-xs font-medium text-amber-600">
+                      Periode: {labelPeriode(p.tanggalPinjam, p.jamPinjam, p.tanggalKembali, p.jamKembali)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={reviewingId === p.id}
+                      onClick={() => handleReviewPeminjaman(p.id, 'APPROVE')}
+                      className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {reviewingId === p.id ? 'Proses...' : 'Setujui'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reviewingId === p.id}
+                      onClick={() => handleReviewPeminjaman(p.id, 'REJECT')}
+                      className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-red-600 ring-1 ring-inset ring-red-200 transition-colors hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Tolak
+                    </button>
+                  </div>
+                </GlassCard>
+              ))}
             </div>
           </section>
         </ScrollReveal>
