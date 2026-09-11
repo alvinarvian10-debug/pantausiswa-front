@@ -101,7 +101,7 @@ export default function NotificationBell({ role }: { role: Role }) {
           icon: 'pending_actions',
           iconClass: 'bg-amber-50 text-amber-600',
           title: `Pengajuan ${i.jenis} baru`,
-          desc: getSiswa(i.siswaId)?.nama ?? '-',
+          desc: getSiswa(i.siswaId)?.nama?.trim() || '-',
           time: timeAgo(i.diajukanPada),
           href: '/dashboard/guru/persetujuan-izin',
         }));
@@ -114,7 +114,7 @@ export default function NotificationBell({ role }: { role: Role }) {
             icon: 'fact_check',
             iconClass: 'bg-blue-50 text-blue-600',
             title: `Tugas perlu dinilai: ${t?.judul ?? '-'}`,
-            desc: getSiswa(s.siswaId)?.nama ?? '-',
+            desc: getSiswa(s.siswaId)?.nama?.trim() || '-',
             time: timeAgo(s.dikumpulkanPada),
             href: '/dashboard/guru/kelola-tugas',
           };
@@ -130,7 +130,7 @@ export default function NotificationBell({ role }: { role: Role }) {
         icon: a.jenis === 'Fasilitas' ? 'build' : 'sentiment_dissatisfied',
         iconClass: 'bg-red-50 text-red-600',
         title: `Aduan baru: ${a.judul}`,
-        desc: a.isAnonim ? 'Anonim' : getSiswa(a.siswaId)?.nama ?? '-',
+        desc: a.isAnonim ? 'Anonim' : getSiswa(a.siswaId)?.nama?.trim() || '-',
         time: a.tanggal,
         href: '/dashboard/admin/pengaduan',
       }));
@@ -141,7 +141,7 @@ export default function NotificationBell({ role }: { role: Role }) {
         icon: 'pending_actions',
         iconClass: 'bg-amber-50 text-amber-600',
         title: `Izin menunggu persetujuan wali kelas`,
-        desc: getSiswa(i.siswaId)?.nama ?? '-',
+        desc: getSiswa(i.siswaId)?.nama?.trim() || '-',
         time: timeAgo(i.diajukanPada),
         href: '/dashboard/guru/persetujuan-izin',
       }));

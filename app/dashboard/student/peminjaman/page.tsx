@@ -9,6 +9,8 @@ import {
   apiKembalikanMandiri,
   apiListBarang,
   apiMyPeminjaman,
+  formatTanggalJam,
+  kondisiToFront,
   type BackendBarang,
   type BackendPeminjaman,
 } from '../../../../lib/api';
@@ -34,7 +36,21 @@ export default function PeminjamanPage() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('Semua');
   const [pickedFasilitas, setPickedFasilitas] = useState<FasilitasView | null>(null);
   const [keperluan, setKeperluan] = useState('');
-  const [jamKembali, setJamKembali] = useState('16:00');
+  // Task 3: info tambahan — alasan (wajib di UI) + bukti URL (opsional).
+  const [alasan, setAlasan] = useState('');
+  const [bukti, setBukti] = useState('');
+  // Pre-order: dua DateTime input (mulai pinjam + batas kembali).
+  // Format datetime-local: "YYYY-MM-DDTHH:mm".
+  const toLocalInput = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [tanggalPinjamInput, setTanggalPinjamInput] = useState(() =>
+    toLocalInput(new Date(Date.now() + 60 * 60 * 1000)),
+  );
+  const [tanggalKembaliInput, setTanggalKembaliInput] = useState(() =>
+    toLocalInput(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
+  );
   const [dbNotice, setDbNotice] = useState('');
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -79,7 +95,8 @@ export default function PeminjamanPage() {
         icon: b.icon ?? 'inventory_2',
         jumlahTotal: b.jumlahTotal,
         jumlahTersedia: b.jumlahTersedia,
-        kondisi: b.kondisi === 'BAIK' ? 'Baik' : 'Rusak',
+        // Tri-state penuh: RUSAK_RINGAN -> 'Diperbaiki' (bukan 'Rusak').
+        kondisi: kondisiToFront(b.kondisi),
       }));
     }
     return fasilitas.map((f) => ({
@@ -101,6 +118,7 @@ export default function PeminjamanPage() {
     icon: string;
     keperluan: string;
     batasLabel: string;
+    status?: string;
     loanIdLokal: string | null;
   }
 
@@ -114,7 +132,8 @@ export default function PeminjamanPage() {
           nama: p.barang?.nama ?? '-',
           icon: p.barang?.icon ?? 'inventory_2',
           keperluan: p.catatan ?? '',
-          batasLabel: `Kembali: ${p.tanggalKembali.slice(0, 10)}`,
+          batasLabel: `${formatTanggalJam(p.tanggalPinjam)} → ${formatTanggalJam(p.tanggalKembali)}`,
+          status: p.status,
           loanIdLokal: null,
         }));
     }
@@ -143,10 +162,39 @@ export default function PeminjamanPage() {
     });
   }, [daftarFasilitas, query, category]);
 
+  // Riwayat lengkap (semua status) dengan format DD-MM-YYYY HH:mm.
+  const riwayat: (PinjamanView & { alasan?: string | null; bukti?: string | null })[] = useMemo(() => {
+    if (bePinjam === null) return [];
+    return [...bePinjam]
+      .sort((a, b) => b.id - a.id)
+      .map((p) => ({
+        key: `riw-${p.id}`,
+        backendId: p.id,
+        nama: p.barang?.nama ?? '-',
+        icon: p.barang?.icon ?? 'inventory_2',
+        keperluan: p.catatan ?? '',
+        batasLabel: `${formatTanggalJam(p.tanggalPinjam)} → ${formatTanggalJam(p.tanggalKembali)}`,
+        status: p.status,
+        loanIdLokal: null,
+        alasan: p.alasan ?? null,
+        bukti: p.bukti ?? null,
+      }));
+  }, [bePinjam]);
+
   const handleAjukan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pickedFasilitas || !keperluan.trim() || saving) return;
+    if (!pickedFasilitas || !keperluan.trim() || !alasan.trim() || saving) return;
     const fasilitasDipilih = pickedFasilitas;
+    const mulai = new Date(tanggalPinjamInput);
+    const kembali = new Date(tanggalKembaliInput);
+    if (Number.isNaN(mulai.getTime()) || Number.isNaN(kembali.getTime())) {
+      setDbError('Tanggal & waktu mulai / batas kembali tidak valid.');
+      return;
+    }
+    if (kembali <= mulai) {
+      setDbError('Batas kembali harus setelah tanggal mulai pinjam.');
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     setSaving(true);
     setDbError('');
@@ -167,10 +215,14 @@ export default function PeminjamanPage() {
         }
         barangId = match.id;
       }
+      // Stok TIDAK berkurang di sini — baru berkurang saat admin APPROVE.
       await apiCreatePeminjaman({
         barangId,
-        tanggalKembali: today,
-        catatan: `${keperluan.trim()} (batas ${jamKembali} WIB)`,
+        tanggalPinjam: mulai.toISOString(),
+        tanggalKembali: kembali.toISOString(),
+        catatan: keperluan.trim(),
+        alasan: alasan.trim(),
+        ...(bukti.trim() ? { bukti: bukti.trim() } : {}),
       });
       // Cache lokal hanya untuk baris lokal (baris backend tak ada di store).
       const asalLokal = fasilitas.find((f) => `lokal-${f.id}` === fasilitasDipilih.key);
@@ -179,13 +231,15 @@ export default function PeminjamanPage() {
           siswaId: CURRENT_SISWA_ID,
           fasilitasId: asalLokal.id,
           keperluan: keperluan.trim(),
-          batasKembali: `${today}T${jamKembali}:00`,
+          batasKembali: tanggalKembaliInput.length === 16 ? `${tanggalKembaliInput}:00` : tanggalKembaliInput,
         });
       }
       await muatBackend();
-      setDbNotice(`Pengajuan "${fasilitasDipilih.nama}" tercatat di backend (menunggu persetujuan admin).`);
+      setDbNotice(`Pengajuan "${fasilitasDipilih.nama}" tercatat di backend (menunggu persetujuan admin). Stok belum berkurang.`);
       setPickedFasilitas(null);
       setKeperluan('');
+      setAlasan('');
+      setBukti('');
     } catch (err) {
       setDbError(
         err instanceof Error ? err.message : 'Gagal menyimpan ke backend.',
@@ -280,6 +334,53 @@ export default function PeminjamanPage() {
                 </GlassCard>
               );
             })}
+          </section>
+        </ScrollReveal>
+      )}
+
+      {riwayat.length > 0 && (
+        <ScrollReveal delay={0.07}>
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">Riwayat Pengajuan</h2>
+            <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wider text-gray-400">
+                    <th className="px-6 py-4 font-semibold">Fasilitas</th>
+                    <th className="px-6 py-4 font-semibold">Mulai → Batas Kembali</th>
+                    <th className="px-6 py-4 font-semibold">Alasan / Bukti</th>
+                    <th className="px-6 py-4 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {riwayat.map((r) => (
+                    <tr key={r.key} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-gray-900">{r.nama}</span>
+                        {r.keperluan && (
+                          <span className="block text-xs text-gray-500">{r.keperluan}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 font-mono tabular-nums text-xs text-gray-500">{r.batasLabel}</td>
+                      <td className="px-6 py-4 text-xs text-gray-500">
+                        {r.alasan || '-'}
+                        {r.bukti && (
+                          <a href={r.bukti} target="_blank" rel="noreferrer" className="ml-2 font-semibold text-emerald-600 hover:text-emerald-700">
+                            Lihat bukti
+                          </a>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                          {r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-gray-400">Format tanggal: DD-MM-YYYY HH:mm.</p>
           </section>
         </ScrollReveal>
       )}
@@ -380,11 +481,44 @@ export default function PeminjamanPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Batas Waktu Kembali</label>
+                <label className="text-sm font-medium text-gray-700">Alasan Peminjaman</label>
+                <textarea
+                  value={alasan}
+                  onChange={(e) => setAlasan(e.target.value)}
+                  rows={3}
+                  required
+                  placeholder="Contoh: Untuk kegiatan ekstrakurikuler basket antar kelas, sudah izin pembina."
+                  className="w-full resize-none rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">Bukti <span className="font-normal text-gray-400">(opsional — URL/dokumen pendukung)</span></label>
                 <input
-                  type="time"
-                  value={jamKembali}
-                  onChange={(e) => setJamKembali(e.target.value)}
+                  type="url"
+                  value={bukti}
+                  onChange={(e) => setBukti(e.target.value)}
+                  placeholder="https://… (surat izin / proposal kegiatan)"
+                  className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">Tanggal &amp; Waktu Mulai Pinjam</label>
+                <input
+                  type="datetime-local"
+                  value={tanggalPinjamInput}
+                  onChange={(e) => setTanggalPinjamInput(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                />
+                <p className="text-xs text-gray-400">Bisa hari ini atau tanggal depan (pre-order).</p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">Tanggal &amp; Waktu Batas Kembali</label>
+                <input
+                  type="datetime-local"
+                  value={tanggalKembaliInput}
+                  onChange={(e) => setTanggalKembaliInput(e.target.value)}
+                  required
                   className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>

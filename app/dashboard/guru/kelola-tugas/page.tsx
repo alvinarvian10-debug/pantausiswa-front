@@ -12,6 +12,7 @@ import {
   apiListKelas,
   apiListMapel,
   apiListTugas,
+  namaAman,
   type BackendSubmission,
   type BackendTugas,
 } from '../../../../lib/api';
@@ -275,7 +276,7 @@ export default function KelolaTugasPage() {
               key: `be-${s.id}`,
               backendSubId: s.id,
               tugasBackendId: t.backendId,
-              nama: s.siswa?.user?.nama ?? '-',
+              nama: namaAman(s.siswa?.user),
               tone: undefined,
               konten: s.fileUrl,
               isLink: s.fileUrl.startsWith('http'),
@@ -305,7 +306,7 @@ export default function KelolaTugasPage() {
               backendSubId: Number.isInteger(Number(s.id)) ? Number(s.id) : null,
               tugasBackendId: null,
               lokal: s,
-              nama: student?.nama ?? '-',
+              nama: student?.nama?.trim() || 'User Tidak Diketahui',
               tone: student?.tone,
               konten: s.konten,
               isLink: s.tipe === 'Link',
@@ -352,7 +353,7 @@ export default function KelolaTugasPage() {
     const req = target.lokal!;
     nilaiSubmisi(req.id, n, fb);
     const s = getSiswa(req.siswaId);
-    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menilai tugas', `Memberi nilai ${n} untuk tugas milik ${s?.nama ?? '-'}`);
+    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menilai tugas', `Memberi nilai ${n} untuk tugas milik ${s?.nama?.trim() || 'User Tidak Diketahui'}`);
     try {
       const numericSubId = Number(req.id);
       if (!Number.isInteger(numericSubId)) {

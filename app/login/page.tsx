@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { hrefForBackendRole, loginToBackend } from '../../lib/api';
 import { roleFromBackend, setSession } from '../../lib/auth';
 
-const DEMO_ROLES = [
+const ROLE_OPTIONS = [
   { href: '/dashboard/student/beranda', label: 'Siswa', icon: 'face', role: 'student' as const },
   { href: '/dashboard/guru', label: 'Guru', icon: 'co_present', role: 'guru' as const },
   { href: '/dashboard/admin', label: 'Admin', icon: 'admin_panel_settings', role: 'admin' as const },
@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [showForgotNotice, setShowForgotNotice] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<(typeof DEMO_ROLES)[number]['role'] | null>(null);
+  const [selectedRole, setSelectedRole] = useState<(typeof ROLE_OPTIONS)[number]['role'] | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -40,7 +40,7 @@ export default function LoginPage() {
       // Cookie HttpOnly sudah dipasang server (route /api/auth/login).
       // Cache sesi untuk UI client.
       const frontRole = roleFromBackend(data.user.role);
-      // Hormati pilihan peran demo bila masih dipilih dan cocok.
+      // Hormati pilihan peran bila masih dipilih dan cocok.
       if (selectedRole && selectedRole !== frontRole) {
         setError(
           `Akun tersebut terdaftar sebagai ${data.user.role}. Pilih peran yang sesuai untuk melanjutkan.`,
@@ -201,13 +201,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Demo routing */}
+          {/* Role routing */}
           <div className="border-t border-gray-100/80 pt-6">
-            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
-              Mode Demo — Pilih Peran
-            </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {DEMO_ROLES.map((role) => {
+              {ROLE_OPTIONS.map((role) => {
                 const isSelected = selectedRole === role.role;
 
                 return (

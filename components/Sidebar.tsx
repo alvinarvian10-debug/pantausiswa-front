@@ -125,7 +125,7 @@ export function useRoleUser(role: Role): { name: string; subtitle: string } {
   if (role === 'student') {
     const s = getSiswa(CURRENT_SISWA_ID);
     const kelas = s ? getKelas(s.kelasId) : undefined;
-    return { name: s?.nama ?? 'Siswa', subtitle: kelas?.nama ?? '-' };
+    return { name: s?.nama?.trim() || 'Siswa', subtitle: kelas?.nama || '-' };
   }
   if (role === 'secretary') {
     let secretaryId = CURRENT_SEKRETARIS_ID;
@@ -137,12 +137,12 @@ export function useRoleUser(role: Role): { name: string; subtitle: string } {
     }
     const account = sekretaris.find((a) => a.id === secretaryId);
     const kelas = account ? getKelas(account.kelasId) : undefined;
-    return { name: account?.nama ?? 'Sekretaris Kelas', subtitle: kelas?.nama ?? '-' };
+    return { name: account?.nama?.trim() || 'Sekretaris Kelas', subtitle: kelas?.nama || '-' };
   }
   if (role === 'guru') {
     const g = getGuru(CURRENT_GURU_ID);
     const kelas = g?.waliKelasId ? getKelas(g.waliKelasId) : undefined;
-    return { name: g?.nama ?? 'Guru', subtitle: kelas ? `Wali Kelas ${kelas.nama}` : (g?.mapel.join(', ') ?? '-') };
+    return { name: g?.nama?.trim() || 'Guru', subtitle: kelas ? `Wali Kelas ${kelas.nama}` : (g?.mapel.join(', ') || '-') };
   }
   return { name: 'Admin Sekolah', subtitle: 'Administrator Sekolah' };
 }

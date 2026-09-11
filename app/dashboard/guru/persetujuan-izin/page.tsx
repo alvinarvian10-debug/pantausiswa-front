@@ -5,7 +5,7 @@ import Avatar from '../../../../components/Avatar';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
-import { apiListIzin, apiReviewIzin, type BackendIzin } from '../../../../lib/api';
+import { apiListIzin, apiReviewIzin, namaAman, type BackendIzin } from '../../../../lib/api';
 import {
   CURRENT_GURU_ID,
   IzinRequest,
@@ -76,9 +76,9 @@ export default function PersetujuanIzinPage() {
       return beIzin.map((b) => ({
         key: `be-${b.id}`,
         backendId: b.id,
-        nama: b.siswa?.user?.nama ?? '-',
+        nama: namaAman(b.siswa?.user),
         tone: undefined,
-        kelas: b.siswa?.kelas?.nama ?? '-',
+        kelas: b.siswa?.kelas?.nama || '-',
         jenis: kapital(b.jenis),
         status: kapital(b.status),
         tanggalMulai: tanggalSaja(b.tanggalMulai),
@@ -95,7 +95,7 @@ export default function PersetujuanIzinPage() {
         key: `lokal-${i.id}`,
         backendId: null,
         lokal: i,
-        nama: s?.nama ?? 'Siswa tidak ditemukan',
+        nama: s?.nama?.trim() || 'User Tidak Diketahui',
         tone: s?.tone,
         kelas: k?.nama ?? '-',
         jenis: i.jenis,
@@ -179,7 +179,7 @@ export default function PersetujuanIzinPage() {
     }
     const req = row.lokal!;
     prosesIzin(req.id, 'Disetujui');
-    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menyetujui izin', `Menyetujui pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama ?? '-'}`);
+    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menyetujui izin', `Menyetujui pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama?.trim() || 'User Tidak Diketahui'}`);
     try {
       await syncKeDB(req, { keputusan: 'Disetujui' });
       setDbNotice('Persetujuan tersimpan di backend (termasuk sinkron presensi).');
@@ -223,7 +223,7 @@ export default function PersetujuanIzinPage() {
     }
     const req = target.lokal!;
     prosesIzin(req.id, 'Ditolak', teks);
-    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama ?? '-'} — ${teks}`);
+    tambahRiwayatGuru(CURRENT_GURU_ID, 'Menolak izin', `Menolak pengajuan ${req.jenis.toLowerCase()} atas nama ${getSiswa(req.siswaId)?.nama?.trim() || 'User Tidak Diketahui'} — ${teks}`);
     try {
       await syncKeDB(req, { keputusan: 'Ditolak', alasanTolak: teks });
       setDbNotice('Penolakan tersimpan di backend.');

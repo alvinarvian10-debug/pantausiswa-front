@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
-import { apiListAduan, apiUpdateAduan, toBackendStatusAduan, type BackendAduan } from '../../../../lib/api';
+import { apiListAduan, apiUpdateAduan, namaAman, toBackendStatusAduan, type BackendAduan } from '../../../../lib/api';
 import { Aduan, useAppData } from '../../../../lib/store';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -15,6 +15,25 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const FILTERS = ['Semua', 'Fasilitas', 'Keluhan'] as const;
+
+// Status terminal — tombol status nonaktif untuk keduanya (bukan cuma Selesai).
+const STATUS_TERMINAL = ['Selesai', 'Ditolak'];
+
+const STATUS_KE_DEPAN: Record<string, string> = {
+  BARU: 'Baru',
+  DIPROSES: 'Proses',
+  SELESAI: 'Selesai',
+  DITOLAK: 'Ditolak',
+};
+
+// Enum persis ke backend (Prisma): Baru->BARU, Proses->DIPROSES, Selesai->SELESAI.
+// JANGAN kirim string tak-terpetakan seperti "lainnya".
+const STATUS_KE_BACKEND: Record<string, string> = {
+  Baru: 'BARU',
+  Proses: 'DIPROSES',
+  Selesai: 'SELESAI',
+  Ditolak: 'DITOLAK',
+};
 
 export default function LaporanAduanPage() {
   const { aduan, getSiswa, getFasilitas, siklusStatusAduan, tanggapiAduan } = useAppData();
@@ -56,31 +75,39 @@ export default function LaporanAduanPage() {
     tanggapan: string | null;
   }
 
+  // Mapper tunggal BackendAduan -> BarisAduan. Dipakai saat load awal MAUPUN
+  // saat merge hasil PATCH (immutable update) agar konsisten — termasuk
+  // menjaga anonimitas (pelapor null bila isAnonim).
+  const toBaris = (a: BackendAduan): BarisAduan => ({
+    key: `be-${a.id}`,
+    backendId: a.id,
+    // Backend menyamarkan nama bila anonim (pelapor null).
+    // namaAman pakai || agar '' ikut fallback (bukan ?? yang lolos string kosong).
+    namaPelapor: !a.isAnonim && a.pelapor ? namaAman(a.pelapor, 'Anonim') : 'Anonim',
+    anonim: a.isAnonim,
+    subPelapor: `${!a.isAnonim && a.pelapor ? namaAman(a.pelapor, 'Anonim') : 'Anonim'} · ${(a.createdAt ?? '').slice(0, 10)}`,
+    jenis: (a.kategori === 'FASILITAS' ? 'Fasilitas' : 'Keluhan') as 'Fasilitas' | 'Keluhan',
+    judul: a.judul,
+    deskripsi: a.deskripsi,
+    fasilitasNama: null,
+    status: STATUS_KE_DEPAN[a.status] ?? a.status,
+    tanggapan: a.tanggapan,
+  });
+
+  // Merge 1 baris hasil PATCH ke state TANPA re-fetch & TANPA re-order:
+  // hanya item dengan id cocok yang diganti, urutan array tetap → no jumping.
+  const mergeBaris = (updated: BackendAduan) => {
+    setBeAduan((prev) =>
+      prev === null ? prev : prev.map((item) => (item.id === updated.id ? { ...updated, createdAt: updated.createdAt ?? item.createdAt } : item)),
+    );
+  };
+
   const barisSemua: BarisAduan[] = useMemo(() => {
     if (beAduan !== null) {
-      const keDepan: Record<string, string> = {
-        BARU: 'Baru',
-        DIPROSES: 'Proses',
-        SELESAI: 'Selesai',
-        DITOLAK: 'Ditolak',
-      };
-      return beAduan.map((a) => ({
-        key: `be-${a.id}`,
-        backendId: a.id,
-        // Backend menyamarkan nama bila anonim (pelapor null).
-        namaPelapor: a.pelapor?.nama ?? 'Anonim',
-        anonim: a.isAnonim,
-        subPelapor: `${a.pelapor?.nama ?? 'Anonim'} · ${(a.createdAt ?? '').slice(0, 10)}`,
-        jenis: (a.kategori === 'FASILITAS' ? 'Fasilitas' : 'Keluhan') as 'Fasilitas' | 'Keluhan',
-        judul: a.judul,
-        deskripsi: a.deskripsi,
-        fasilitasNama: null,
-        status: keDepan[a.status] ?? a.status,
-        tanggapan: a.tanggapan,
-      }));
+      return beAduan.map(toBaris);
     }
     return aduan.map((a) => {
-      const pelapor = a.isAnonim ? 'Anonim' : (getSiswa(a.siswaId)?.nama ?? '-');
+      const pelapor = a.isAnonim ? 'Anonim' : (getSiswa(a.siswaId)?.nama?.trim() || 'Anonim');
       return {
         key: `lokal-${a.id}`,
         backendId: Number.isInteger(Number(a.id)) ? Number(a.id) : null,
@@ -139,8 +166,9 @@ export default function LaporanAduanPage() {
     setDbNotice('');
     if (target.backendId !== null) {
       try {
-        await apiUpdateAduan(target.backendId, { tanggapan: teks });
-        await muatBackend();
+        // ID eksak baris ini (bukan index) + merge imutabel → baris lain tak tersentuh, no jumping.
+        const updated = await apiUpdateAduan(target.backendId, { tanggapan: teks });
+        mergeBaris(updated);
         setDbNotice('Tanggapan tersimpan di backend.');
       } catch (err) {
         setDbError(
@@ -172,22 +200,21 @@ export default function LaporanAduanPage() {
     }
   };
 
-  const STATUS_BE: Record<string, string> = {
-    Baru: 'BARU',
-    Proses: 'DIPROSES',
-    Selesai: 'SELESAI',
-  };
-
   const handleStatusMaju = async (a: BarisAduan) => {
     if (saving) return;
+    // Status terminal tak bisa dimajukan (tombol juga nonaktif di UI).
+    if (STATUS_TERMINAL.includes(a.status)) return;
     const next = a.status === 'Baru' ? 'Proses' : 'Selesai';
     if (a.backendId !== null) {
       setSaving(true);
       setDbError('');
       setDbNotice('');
       try {
-        await apiUpdateAduan(a.backendId, { status: STATUS_BE[next] ?? next });
-        await muatBackend();
+        // ID eksak aduan ini (a.backendId, bukan index array) + payload enum
+        // Prisma persis via STATUS_KE_BACKEND. Merge imutabel, tanpa re-fetch.
+        const payload = STATUS_KE_BACKEND[next];
+        const updated = await apiUpdateAduan(a.backendId, { status: payload });
+        mergeBaris(updated);
         setDbNotice(`Status "${a.judul}" → ${next}, tersimpan di backend.`);
       } catch (err) {
         setDbError(
@@ -271,8 +298,11 @@ export default function LaporanAduanPage() {
         ))}
       </div>
 
-      <StaggerGroup key={filter} as="div" className="flex flex-col gap-4">
+      {/* Tanpa key={filter}: key stabil per item (be-<id>) agar ganti filter
+          maupun update status TIDAK me-remount seluruh list (no jumping). */}
+      <StaggerGroup as="div" className="flex flex-col gap-4">
         {visible.map((a) => {
+          const terminal = STATUS_TERMINAL.includes(a.status);
           return (
             <GlassCard key={a.key} className="p-6">
               <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -289,12 +319,12 @@ export default function LaporanAduanPage() {
                 <button
                   type="button"
                   onClick={() => handleStatusMaju(a)}
-                  disabled={a.status === 'Selesai'}
-                  title={a.status === 'Selesai' ? 'Sudah selesai' : 'Klik untuk memajukan status'}
-                  className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition-transform active:scale-95 ${STATUS_STYLE[a.status]} ${a.status !== 'Selesai' ? 'cursor-pointer hover:brightness-95' : 'cursor-default'}`}
+                  disabled={terminal}
+                  title={terminal ? 'Status final' : 'Klik untuk memajukan status'}
+                  className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition-transform active:scale-95 ${STATUS_STYLE[a.status]} ${!terminal ? 'cursor-pointer hover:brightness-95' : 'cursor-default'}`}
                 >
                   {a.status}
-                  {a.status !== 'Selesai' && <span className="material-symbols-outlined text-[14px]">arrow_forward</span>}
+                  {!terminal && <span className="material-symbols-outlined text-[14px]">arrow_forward</span>}
                 </button>
               </div>
               <h3 className="text-base font-semibold text-gray-900">{a.judul}</h3>

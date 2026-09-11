@@ -8,7 +8,7 @@ import ScrollReveal from '../../../components/ScrollReveal';
 import StaggerGroup from '../../../components/StaggerGroup';
 import AnimatedCounter from '../../../components/AnimatedCounter';
 import { CURRENT_GURU_ID, useAppData } from '../../../lib/store';
-import { apiListIzin, apiMe, type BackendIzin } from '../../../lib/api';
+import { apiListIzin, apiMe, namaAman, type BackendIzin } from '../../../lib/api';
 
 const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
@@ -41,7 +41,7 @@ export default function GuruDashboard() {
     apiListIzin('MENUNGGU').then((r) => setBeIzin(r.data)).catch(() => setBeIzin(null));
   }, []);
 
-  const namaTampil = namaBackend ?? me?.nama ?? 'Guru';
+  const namaTampil = namaBackend?.trim() || me?.nama?.trim() || 'Guru';
 
   const roster = useMemo(() => {
     if (!primaryKelas) return [];
@@ -74,7 +74,7 @@ export default function GuruDashboard() {
     if (beIzin !== null) {
       return beIzin.map((b) => ({
         key: `be-${b.id}`,
-        nama: b.siswa?.user?.nama ?? '-',
+        nama: namaAman(b.siswa?.user),
         jenis: kapital(b.jenis),
         alasan: b.keterangan,
         tanggal: b.tanggalMulai.slice(0, 10),
@@ -84,7 +84,7 @@ export default function GuruDashboard() {
       const s = getSiswa(i.siswaId);
       return {
         key: `lokal-${i.id}`,
-        nama: s?.nama ?? 'Siswa tidak ditemukan',
+        nama: s?.nama?.trim() || 'User Tidak Diketahui',
         jenis: i.jenis,
         alasan: i.alasan,
         tanggal: i.tanggalMulai,

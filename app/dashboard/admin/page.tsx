@@ -12,6 +12,8 @@ import {
   apiListAduan,
   apiListPeminjaman,
   apiRingkasan,
+  formatTanggalJam,
+  namaAman,
   type BackendAduan,
   type BackendPeminjaman,
   type BackendRingkasan,
@@ -119,7 +121,7 @@ export default function AdminDashboard() {
         .map((a) => ({
           key: `be-${a.id}`,
           judul: a.judul,
-          pelapor: a.pelapor?.nama ?? '-',
+          pelapor: a.pelapor ? namaAman(a.pelapor, 'Anonim') : 'Anonim',
           status: STATUS_ADUAN_KE_DEPAN[a.status] ?? a.status,
         }));
     }
@@ -129,7 +131,7 @@ export default function AdminDashboard() {
       .map((a) => ({
         key: `lokal-${a.id}`,
         judul: a.judul,
-        pelapor: a.isAnonim ? 'Anonim' : (getSiswa(a.siswaId)?.nama ?? '-'),
+        pelapor: a.isAnonim ? 'Anonim' : (getSiswa(a.siswaId)?.nama?.trim() || '-'),
         status: a.status,
       }));
   }, [beAduan, aduan, getSiswa]);
@@ -148,10 +150,10 @@ export default function AdminDashboard() {
       const now = new Date();
       return bePinjam.map((p) => ({
         key: `be-${p.id}`,
-        nama: p.siswa?.user?.nama ?? '-',
+        nama: namaAman(p.siswa?.user),
         barang: p.barang?.nama ?? '-',
-        pinjam: p.tanggalPinjam.slice(0, 10),
-        batas: p.tanggalKembali.slice(0, 10),
+        pinjam: formatTanggalJam(p.tanggalPinjam),
+        batas: formatTanggalJam(p.tanggalKembali),
         terlambat: new Date(p.tanggalKembali) < now,
       }));
     }
@@ -159,7 +161,7 @@ export default function AdminDashboard() {
       .filter((p) => p.status === 'Dipinjam')
       .map((p) => ({
         key: `lokal-${p.id}`,
-        nama: getSiswa(p.siswaId)?.nama ?? '-',
+        nama: getSiswa(p.siswaId)?.nama?.trim() || 'User Tidak Diketahui',
         barang: getFasilitas(p.fasilitasId)?.nama ?? '-',
         pinjam: p.tanggalPinjam,
         batas: `${p.batasKembali.slice(11, 16)} WIB`,

@@ -8,6 +8,7 @@ import {
   apiListPasswordRequests,
   apiReviewPasswordRequest,
   apiUpdatePengaturan,
+  namaAman,
   type BackendPasswordRequest,
 } from '../../../../lib/api';
 import { useAppData } from '../../../../lib/store';
@@ -165,8 +166,8 @@ export default function PengaturanPage() {
               {requests.map((request) => (
                 <div key={request.id} className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="font-semibold text-gray-900">{request.requester?.nama ?? '-'} · {request.requester?.sekretaris?.kelas?.nama ?? '-'}</p>
-                    <p className="text-xs text-gray-500">{request.requester?.email ?? '-'}</p>
+                    <p className="font-semibold text-gray-900">{request.requester ? namaAman(request.requester) : 'User Tidak Diketahui'} · {request.requester?.sekretaris?.kelas?.nama || '-'}</p>
+                    <p className="text-xs text-gray-500">{request.requester?.email || '-'}</p>
                     <p className="mt-1 text-xs text-gray-400">Diajukan {new Date(request.createdAt).toLocaleString('id-ID')}</p>
                   </div>
                   <div className="flex gap-2">

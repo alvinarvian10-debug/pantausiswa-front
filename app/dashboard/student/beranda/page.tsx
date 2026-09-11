@@ -10,6 +10,7 @@ import {
   apiMyPeminjaman,
   apiMyPresensi,
   apiMyTugas,
+  formatTanggalJam,
   type BackendIzin,
   type BackendPeminjaman,
   type BackendPresensi,
@@ -98,7 +99,7 @@ export default function StudentDashboard() {
         icon: 'inventory_2',
         nama: loan.barang?.nama ?? '-',
         keperluan: loan.catatan ?? '',
-        batasLabel: loan.tanggalKembali.slice(0, 10),
+        batasLabel: `${formatTanggalJam(loan.tanggalPinjam)} → ${formatTanggalJam(loan.tanggalKembali)}`,
       };
     }
     const loan = peminjaman.find((p) => p.siswaId === CURRENT_SISWA_ID && p.status === 'Dipinjam');

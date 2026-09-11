@@ -142,7 +142,7 @@ export interface BackendIzin {
   status: BackendStatusIzin;
   catatanReview: string | null;
   siswa?: {
-    user?: { nama?: string };
+    user?: { nama?: string; email?: string };
     kelas?: { nama?: string } | null;
   };
 }
@@ -306,7 +306,7 @@ export interface BackendSubmission {
   nilai: number | null;
   feedback: string | null;
   siswa?: {
-    user?: { nama?: string };
+    user?: { nama?: string; email?: string };
   };
 }
 
@@ -379,7 +379,7 @@ export function apiSubmitTugas(
 
 /** Guru melihat pengumpulan untuk tugasnya. */
 export function apiGetSubmissions(tugasId: number) {
-  return apiList<BackendSubmission & { siswa?: { user?: { nama?: string } } }>(
+  return apiList<BackendSubmission>(
     `/tugas/${tugasId}/submissions`,
   );
 }
@@ -441,6 +441,29 @@ export function apiUpdateBarang(id: number, input: Record<string, unknown>) {
   });
 }
 
+// ---- Kondisi barang: tri-state mapping tunggal (Task 5) ----
+// Prisma enum: BAIK | RUSAK_RINGAN | RUSAK_BERAT.
+// UI: Baik | Diperbaiki (rusak ringan) | Rusak (rusak berat).
+// JANGAN collapse RUSAK_RINGAN ke 'Rusak' — itu bug tombol tengah.
+
+export type FrontKondisi = 'Baik' | 'Rusak' | 'Diperbaiki';
+
+/** BAIK->Baik, RUSAK_RINGAN->Diperbaiki, RUSAK_BERAT->Rusak. */
+export function kondisiToFront(kondisi: string): FrontKondisi {
+  if (kondisi === 'RUSAK_RINGAN') return 'Diperbaiki';
+  if (kondisi === 'RUSAK_BERAT') return 'Rusak';
+  return 'Baik';
+}
+
+/** Baik->BAIK, Diperbaiki->RUSAK_RINGAN, Rusak->RUSAK_BERAT. */
+export function kondisiToBackend(
+  kondisi: string,
+): 'BAIK' | 'RUSAK_RINGAN' | 'RUSAK_BERAT' {
+  if (kondisi === 'Rusak') return 'RUSAK_BERAT';
+  if (kondisi === 'Diperbaiki') return 'RUSAK_RINGAN';
+  return 'BAIK';
+}
+
 // ---- Peminjaman (kontrak back/src/peminjaman) ----
 
 export type BackendStatusPeminjaman =
@@ -458,23 +481,76 @@ export interface BackendPeminjaman {
   tanggalKembali: string;
   status: BackendStatusPeminjaman;
   catatan: string | null;
+  alasan: string | null;
+  bukti: string | null;
   barang?: BackendBarang;
   siswa?: {
-    user?: { nama?: string };
+    // email sebagai fallback bila nama kosong (Task 2).
+    user?: { nama?: string; email?: string };
     kelas?: { nama?: string } | null;
   };
 }
 
-/** Siswa mengajukan pinjaman. Stok berkurang saat admin APPROVE. */
+/**
+ * Format ISO datetime -> "DD-MM-YYYY HH:mm" (WIB lokal browser).
+ * Contoh: "2026-09-15T10:00:00.000Z" -> "15-09-2026 17:00".
+ * Aman untuk string kosong/invalid (kembalikan '-').
+ */
+export function formatTanggalJam(iso?: string | null): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Fallback nama aman global: nama kosong/blank -> email -> 'User Tidak Diketahui'.
+ * Memakai || (bukan ??) agar string kosong '' ikut ter-fallback.
+ */
+export function namaAman(
+  user?: { nama?: string | null; email?: string | null; username?: string | null } | null,
+  fallback = 'User Tidak Diketahui',
+): string {
+  const nama = user?.nama?.trim();
+  if (nama) return nama;
+  const email = user?.email?.trim() || user?.username?.trim();
+  if (email) return email;
+  return fallback;
+}
+
+/** Siswa mengajukan pinjaman (pre-order: tanggalPinjam boleh future). Stok TIDAK berkurang — baru berkurang saat admin APPROVE. */
 export function apiCreatePeminjaman(input: {
   barangId: number;
   jumlah?: number;
+  tanggalPinjam?: string;
   tanggalKembali: string;
   catatan?: string;
+  alasan?: string;
+  bukti?: string;
 }) {
   return apiFetch<BackendPeminjaman>('/peminjaman', {
     method: 'POST',
     body: JSON.stringify({ jumlah: 1, ...input }),
+  });
+}
+
+/** Admin setujui (stok AKHIRNYA berkurang) / tolak pengajuan peminjaman. */
+export function apiReviewPeminjaman(
+  id: number,
+  aksi: 'APPROVE' | 'REJECT',
+  catatan?: string,
+) {
+  return apiFetch<BackendPeminjaman>(`/peminjaman/${id}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify(catatan ? { aksi, catatan } : { aksi }),
+  });
+}
+
+/** Admin tandai barang sudah dikembalikan (stok pulih). */
+export function apiKembalikanAdmin(id: number) {
+  return apiFetch<BackendPeminjaman>(`/peminjaman/${id}/kembalikan`, {
+    method: 'PATCH',
   });
 }
 
@@ -525,7 +601,7 @@ export interface BackendAduan {
   isAnonim: boolean;
   tanggapan: string | null;
   createdAt?: string;
-  pelapor?: { nama: string; role: string } | null;
+  pelapor?: { nama?: string; email?: string; role?: string } | null;
 }
 
 /** Buat tiket aduan (semua role). Anonim disamarkan di daftar admin. */

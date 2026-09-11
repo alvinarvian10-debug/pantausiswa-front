@@ -8,7 +8,12 @@ import {
   apiCreateBarang,
   apiListBarang,
   apiListPeminjaman,
+  apiReviewPeminjaman,
   apiUpdateBarang,
+  formatTanggalJam,
+  kondisiToBackend,
+  kondisiToFront,
+  namaAman,
   type BackendBarang,
   type BackendPeminjaman,
 } from '../../../../lib/api';
@@ -35,18 +40,24 @@ export default function InventarisPage() {
   // Sumber kebenaran: backend bila terjangkau, lokal bila tidak.
   const [beBarang, setBeBarang] = useState<BackendBarang[] | null>(null);
   const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
+  // Antrean persetujuan (MENUNGGU) — stok belum berkurang untuk baris ini.
+  const [bePending, setBePending] = useState<BackendPeminjaman[] | null>(null);
+  const [reviewing, setReviewing] = useState<number | null>(null);
 
   const muatBackend = async () => {
     try {
-      const [b, p] = await Promise.all([
+      const [b, p, pending] = await Promise.all([
         apiListBarang(),
         apiListPeminjaman('DIPINJAM'),
+        apiListPeminjaman('MENUNGGU'),
       ]);
       setBeBarang(b);
       setBePinjam(p.data);
+      setBePending(pending.data);
     } catch {
       setBeBarang(null);
       setBePinjam(null);
+      setBePending(null);
     }
   };
 
@@ -77,7 +88,8 @@ export default function InventarisPage() {
         icon: b.icon ?? 'inventory_2',
         jumlahTotal: b.jumlahTotal,
         jumlahTersedia: b.jumlahTersedia,
-        kondisi: (b.kondisi === 'BAIK' ? 'Baik' : 'Rusak') as KondisiFasilitas,
+        // Tri-state penuh: RUSAK_RINGAN -> 'Diperbaiki' (bukan 'Rusak').
+        kondisi: kondisiToFront(b.kondisi) as KondisiFasilitas,
       }));
     }
     return fasilitas.map((f) => ({
@@ -93,11 +105,11 @@ export default function InventarisPage() {
     }));
   }, [beBarang, fasilitas]);
 
-  // PATCH kondisi ke backend (Baik→BAIK, Rusak→RUSAK_BERAT,
-  // Diperbaiki→RUSAK_RINGAN). Id lokal non-numerik dicocokkan via nama.
+  // PATCH kondisi ke backend via mapping tunggal kondisiToBackend
+  // (Baik→BAIK, Diperbaiki→RUSAK_RINGAN, Rusak→RUSAK_BERAT).
+  // Id lokal non-numerik dicocokkan via nama.
   const syncKondisiKeDB = async (fasilitasId: string | number, nama: string, kondisi: KondisiFasilitas) => {
-    const backendKondisi =
-      kondisi === 'Rusak' ? 'RUSAK_BERAT' : kondisi === 'Diperbaiki' ? 'RUSAK_RINGAN' : 'BAIK';
+    const backendKondisi = kondisiToBackend(kondisi);
     let numericId = Number(fasilitasId);
     if (!Number.isInteger(numericId)) {
       const daftar = await apiListBarang();
@@ -151,13 +163,47 @@ export default function InventarisPage() {
     detail: string;
   }
 
+  // Antrean MENUNGGU untuk direview (dengan alasan + bukti).
+  const pendingLoans: (PinjamanAktifView & { id: number; alasan: string | null; bukti: string | null })[] = useMemo(() => {
+    if (bePending === null) return [];
+    return bePending.map((p) => ({
+      key: `pending-${p.id}`,
+      id: p.id,
+      barangNama: p.barang?.nama ?? '-',
+      peminjam: namaAman(p.siswa?.user),
+      detail: `${p.catatan ?? ''} · ${formatTanggalJam(p.tanggalPinjam)} → ${formatTanggalJam(p.tanggalKembali)}`,
+      alasan: p.alasan ?? null,
+      bukti: p.bukti ?? null,
+    }));
+  }, [bePending]);
+
+  const handleReview = async (id: number, aksi: 'APPROVE' | 'REJECT') => {
+    if (reviewing !== null) return;
+    setReviewing(id);
+    setDbError('');
+    setDbNotice('');
+    try {
+      await apiReviewPeminjaman(id, aksi);
+      await muatBackend();
+      setDbNotice(
+        aksi === 'APPROVE'
+          ? 'Pengajuan disetujui — stok AKHIRNYA berkurang.'
+          : 'Pengajuan ditolak — stok tetap utuh.',
+      );
+    } catch (err) {
+      setDbError(err instanceof Error ? `Gagal review: ${err.message}` : 'Gagal review.');
+    } finally {
+      setReviewing(null);
+    }
+  };
+
   const activeLoans: PinjamanAktifView[] = useMemo(() => {
     if (bePinjam !== null) {
       return bePinjam.map((p) => ({
         key: `be-${p.id}`,
         barangNama: p.barang?.nama ?? '-',
-        peminjam: p.siswa?.user?.nama ?? '-',
-        detail: `${p.catatan ?? ''} · Kembali: ${p.tanggalKembali.slice(0, 10)}`,
+        peminjam: namaAman(p.siswa?.user),
+        detail: `${p.catatan ?? ''}${p.alasan ? ` · Alasan: ${p.alasan}` : ''} · ${formatTanggalJam(p.tanggalPinjam)} → ${formatTanggalJam(p.tanggalKembali)}`,
       }));
     }
     return peminjaman
@@ -168,7 +214,7 @@ export default function InventarisPage() {
         return {
           key: `lokal-${p.id}`,
           barangNama: f?.nama ?? '-',
-          peminjam: s?.nama ?? '-',
+          peminjam: s?.nama?.trim() || 'User Tidak Diketahui',
           detail: `${p.keperluan} · Batas: ${p.batasKembali.slice(11, 16)} WIB`,
         };
       });
@@ -316,6 +362,53 @@ export default function InventarisPage() {
           <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
           {dbError}
         </div>
+      )}
+
+      {pendingLoans.length > 0 && (
+        <ScrollReveal delay={0.05}>
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">Menunggu Persetujuan (stok belum berkurang)</h2>
+            <div className="flex flex-col gap-3">
+              {pendingLoans.map((p) => (
+                <GlassCard key={p.key} className="flex flex-col gap-3 border border-amber-200 bg-amber-50/50 p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-medium text-gray-900">
+                      {p.barangNama} — diajukan oleh <span className="font-semibold">{p.peminjam}</span>
+                    </p>
+                    <p className="font-mono tabular-nums text-xs text-gray-500">{p.detail}</p>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-semibold text-gray-900">Alasan:</span> {p.alasan || '-'}
+                  </p>
+                  {p.bukti && (
+                    <a href={p.bukti} target="_blank" rel="noreferrer" className="inline-flex w-max items-center gap-1 text-sm font-semibold text-emerald-600 hover:text-emerald-700">
+                      <span className="material-symbols-outlined text-[16px]">attach_file</span>
+                      Lihat bukti
+                    </a>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={reviewing === p.id}
+                      onClick={() => handleReview(p.id, 'APPROVE')}
+                      className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-500/70"
+                    >
+                      {reviewing === p.id ? 'Memproses…' : 'Setujui (stok berkurang)'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reviewing === p.id}
+                      onClick={() => handleReview(p.id, 'REJECT')}
+                      className="rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Tolak
+                    </button>
+                  </div>
+                </GlassCard>
+              ))}
+            </div>
+          </section>
+        </ScrollReveal>
       )}
 
       {activeLoans.length > 0 && (
