@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import ThemeToggle from './ThemeToggle';
 
 const NAV_LINKS = [
   { href: '#fitur', label: 'Fitur' },
@@ -55,6 +56,7 @@ export default function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           <Link
             href="/login"
             className="hidden rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white shadow-cta transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-cta-lg active:scale-95 sm:inline-flex sm:items-center sm:gap-2"
@@ -66,7 +68,7 @@ export default function SiteHeader() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-expanded={menuOpen}
             aria-label={menuOpen ? 'Tutup menu' : 'Buka menu'}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100 md:hidden dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <span className="material-symbols-outlined text-[24px]">
               {menuOpen ? 'close' : 'menu'}

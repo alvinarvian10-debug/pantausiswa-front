@@ -155,7 +155,7 @@ export default function NotificationBell({ role }: { role: Role }) {
         onClick={() => setOpen((v) => !v)}
         aria-label="Notifikasi"
         aria-expanded={open}
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-white/80 hover:text-emerald-600"
+        className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-white/80 hover:text-emerald-600 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-emerald-400"
       >
         <span className="material-symbols-outlined text-[24px]">notifications</span>
         {notifs.length > 0 && (
@@ -169,8 +169,8 @@ export default function NotificationBell({ role }: { role: Role }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-50 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border border-white/60 bg-white shadow-glass-lg sm:w-96">
-          <div className="border-b border-gray-100 px-5 py-4">
+        <div className="absolute right-0 top-12 z-50 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border border-white/60 bg-white shadow-glass-lg sm:w-96 dark:border-slate-700/60">
+          <div className="border-b border-gray-100 px-5 py-4 dark:border-slate-800">
             <h3 className="text-sm font-bold text-gray-900">Notifikasi</h3>
           </div>
           <ul className="max-h-[70vh] overflow-y-auto sm:max-h-96">
@@ -179,7 +179,7 @@ export default function NotificationBell({ role }: { role: Role }) {
                 <Link
                   href={n.href}
                   onClick={() => setOpen(false)}
-                  className="flex items-start gap-3 border-b border-gray-50 px-5 py-3.5 transition-colors last:border-0 hover:bg-slate-50"
+                  className="flex items-start gap-3 border-b border-gray-50 px-5 py-3.5 transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/70"
                 >
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${n.iconClass}`}>
                     <span className="material-symbols-outlined icon-fill text-[18px]">{n.icon}</span>

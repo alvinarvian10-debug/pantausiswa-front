@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { hrefForBackendRole, loginToBackend } from '../../lib/api';
 import { roleFromBackend, setSession } from '../../lib/auth';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,14 +41,17 @@ export default function LoginPage() {
   };
 
   const inputClasses =
-    'w-full rounded-xl border border-gray-200/90 bg-white/70 py-3 pl-11 pr-4 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-all focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/25';
+    'w-full rounded-xl border border-gray-200/90 bg-white/70 py-3 pl-11 pr-4 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-all focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/25 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-emerald-400';
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-y-auto bg-slate-50 p-4 py-12 text-gray-900">
+      <div className="absolute right-6 top-6 z-20">
+        <ThemeToggle />
+      </div>
       {/* Back link */}
       <Link
         href="/"
-        className="absolute left-6 top-6 z-20 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
+        className="absolute left-6 top-6 z-20 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 hover:text-emerald-600 dark:text-emerald-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
       >
         <span className="material-symbols-outlined text-[20px]">arrow_back</span>
         Kembali ke Beranda
@@ -56,15 +60,15 @@ export default function LoginPage() {
       {/* Decorative background blobs */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-[10%] -top-[10%] h-[40%] w-[40%] rounded-full bg-emerald-200/40 blur-3xl"
+        className="pointer-events-none absolute -left-[10%] -top-[10%] h-[40%] w-[40%] rounded-full bg-emerald-200/40 blur-3xl dark:bg-emerald-500/10"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-[10%] top-[15%] h-[30%] w-[30%] rounded-full bg-teal-100/40 blur-3xl"
+        className="pointer-events-none absolute -right-[10%] top-[15%] h-[30%] w-[30%] rounded-full bg-teal-100/40 blur-3xl dark:bg-teal-500/10"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-[15%] -left-[5%] h-[35%] w-[35%] rounded-full bg-blue-100/40 blur-3xl"
+        className="pointer-events-none absolute -bottom-[15%] -left-[5%] h-[35%] w-[35%] rounded-full bg-blue-100/40 blur-3xl dark:bg-blue-500/10"
       />
 
       <main className="relative z-10 w-full max-w-md animate-fade-in-up">
@@ -86,7 +90,7 @@ export default function LoginPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+              <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30">
                 <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
                 {error}
               </div>
@@ -136,7 +140,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
-                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 >
                   <span className="material-symbols-outlined text-[20px]">
                     {showPassword ? 'visibility_off' : 'visibility'}
@@ -163,7 +167,8 @@ export default function LoginPage() {
               </div>
 
               {showForgotNotice && (
-                <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700 ring-1 ring-inset ring-blue-100">
+                <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700 ring-1 ring-inset ring-blue-100 dark:bg-blue-500/10 dark:text-blue-200 dark:ring-blue-500/30"
+                >
                   <span className="material-symbols-outlined icon-fill mt-0.5 text-[18px]">info</span>
                   <p>
                     Untuk reset password, silakan hubungi Admin sekolah — perubahan

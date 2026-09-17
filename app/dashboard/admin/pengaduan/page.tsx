@@ -8,10 +8,10 @@ import { apiListAduan, apiUpdateAduan, toBackendStatusAduan, type BackendAduan }
 import { Aduan, useAppData } from '../../../../lib/store';
 
 const STATUS_STYLE: Record<string, string> = {
-  Baru: 'bg-blue-50 text-blue-700 ring-blue-100',
-  Proses: 'bg-amber-50 text-amber-700 ring-amber-100',
-  Selesai: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-  Ditolak: 'bg-red-50 text-red-600 ring-red-100',
+  Baru: 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30',
+  Proses: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
+  Selesai: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30',
+  Ditolak: 'bg-red-50 text-red-600 ring-red-100 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30',
 };
 
 const FILTERS = ['Semua', 'Fasilitas', 'Keluhan'] as const;
@@ -129,9 +129,9 @@ export default function LaporanAduanPage() {
     const proses = barisSemua.filter((a) => a.status === 'Proses').length;
     const selesai = barisSemua.filter((a) => a.status === 'Selesai').length;
     return [
-      { label: 'Aduan Baru', count: baru, chip: 'bg-blue-50 text-blue-600 ring-blue-100', icon: 'markunread' },
-      { label: 'Dalam Proses', count: proses, chip: 'bg-amber-50 text-amber-600 ring-amber-100', icon: 'hourglass_top' },
-      { label: 'Selesai', count: selesai, chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100', icon: 'task_alt' },
+      { label: 'Aduan Baru', count: baru, chip: 'bg-blue-50 text-blue-600 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30', icon: 'markunread' },
+      { label: 'Dalam Proses', count: proses, chip: 'bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30', icon: 'hourglass_top' },
+      { label: 'Selesai', count: selesai, chip: 'bg-emerald-50 text-emerald-600 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30', icon: 'task_alt' },
     ];
   }, [barisSemua]);
 
@@ -254,13 +254,13 @@ export default function LaporanAduanPage() {
       </StaggerGroup>
 
       {dbNotice && (
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30">
           <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
           {dbNotice}
         </div>
       )}
       {dbError && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30">
           <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
           {dbError}
         </div>
@@ -277,7 +277,7 @@ export default function LaporanAduanPage() {
               className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
                 statusFilter === f
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+                  : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
               }`}
             >
               {f}
@@ -294,7 +294,7 @@ export default function LaporanAduanPage() {
               className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
                 filter === f
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+                  : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
               }`}
             >
               {f}
@@ -303,7 +303,11 @@ export default function LaporanAduanPage() {
         </div>
       </div>
 
-      <StaggerGroup key={`${filter}-${statusFilter}`} as="div" className="flex flex-col gap-4">
+      <StaggerGroup
+        key={`${filter}-${statusFilter}-${visible.map((r) => r.key).join('|')}`}
+        as="div"
+        className="flex flex-col gap-4"
+      >
         {visible.map((a) => {
           return (
             <GlassCard key={a.key} className="p-6">
@@ -342,13 +346,13 @@ export default function LaporanAduanPage() {
               </div>
               <h3 className="text-base font-semibold text-gray-900">{a.judul}</h3>
               {a.fasilitasNama && (
-                <p className="mt-0.5 text-xs font-medium text-blue-600">Fasilitas: {a.fasilitasNama}</p>
+                <p className="mt-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">Fasilitas: {a.fasilitasNama}</p>
               )}
               <p className="mt-1 text-sm leading-relaxed text-gray-500">{a.deskripsi}</p>
 
               {a.tanggapan ? (
-                <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/80 p-4 text-sm leading-relaxed text-emerald-800">
-                  <span className="mb-1 flex items-center gap-1.5 font-semibold text-emerald-700">
+                <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/80 p-4 text-sm leading-relaxed text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+                  <span className="mb-1 flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-300">
                     <span className="material-symbols-outlined icon-fill text-[18px]">forum</span>
                     Tanggapan Admin:
                   </span>
@@ -358,7 +362,7 @@ export default function LaporanAduanPage() {
                 <button
                   type="button"
                   onClick={() => { setResponTarget(a); setTanggapan(''); }}
-                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                 >
                   <span className="material-symbols-outlined text-[16px]">reply</span>
                   Beri Tanggapan
@@ -368,7 +372,7 @@ export default function LaporanAduanPage() {
           );
         })}
         {visible.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-12 text-center text-sm text-gray-400">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-12 text-center text-sm text-gray-400 dark:border-slate-700/70 dark:bg-slate-900">
             Tidak ada aduan pada filter ini.
           </div>
         )}
@@ -385,13 +389,13 @@ export default function LaporanAduanPage() {
                 rows={4}
                 required
                 placeholder="Tulis tanggapan resmi untuk aduan ini…"
-                className="w-full resize-none rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                className="w-full resize-none rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:bg-slate-900 dark:text-slate-200"
               />
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setResponTarget(null)}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-slate-50"
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
                 >
                   Batal
                 </button>

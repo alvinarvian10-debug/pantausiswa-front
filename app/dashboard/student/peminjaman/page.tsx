@@ -17,15 +17,15 @@ import { CURRENT_SISWA_ID, Fasilitas, useAppData } from '../../../../lib/store';
 const CATEGORIES = ['Semua', 'Ruangan', 'Elektronik', 'Olahraga'] as const;
 
 const CATEGORY_CHIP: Record<string, string> = {
-  Ruangan: 'bg-blue-50 text-blue-700 ring-blue-100',
-  Elektronik: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-  Olahraga: 'bg-orange-50 text-orange-700 ring-orange-100',
+  Ruangan: 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30',
+  Elektronik: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30',
+  Olahraga: 'bg-orange-50 text-orange-700 ring-orange-100 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-500/30',
 };
 
 const KONDISI_STYLE: Record<string, string> = {
   Baik: '',
-  Rusak: 'bg-red-50 text-red-600 ring-red-100',
-  Diperbaiki: 'bg-amber-50 text-amber-600 ring-amber-100',
+  Rusak: 'bg-red-50 text-red-600 ring-red-100 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30',
+  Diperbaiki: 'bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
 };
 
 /** "2026-09-10 08:00" → "2026-09-11 15:00" (jam boleh kosong utk data lama). */
@@ -287,13 +287,13 @@ export default function PeminjamanPage() {
       </ScrollReveal>
 
       {dbNotice && (
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30">
           <span className="material-symbols-outlined icon-fill text-[18px]">check_circle</span>
           {dbNotice}
         </div>
       )}
       {dbError && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100">
+        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-100 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30">
           <span className="material-symbols-outlined icon-fill text-[18px]">error</span>
           {dbError}
         </div>
@@ -308,10 +308,10 @@ export default function PeminjamanPage() {
             {pendingLoans.map((loan) => (
               <GlassCard
                 key={loan.key}
-                className="flex flex-col gap-4 border border-amber-200 bg-amber-50/50 p-5 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-4 border border-amber-200 bg-amber-50/50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-500/10"
               >
                 <div className="flex items-center gap-4">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 ring-1 ring-inset ring-amber-100">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 ring-1 ring-inset ring-amber-100 dark:bg-slate-800 dark:text-amber-300 dark:ring-amber-500/30">
                     <span className="material-symbols-outlined icon-fill text-[26px]">{loan.icon}</span>
                   </span>
                   <div className="flex flex-col">
@@ -320,11 +320,11 @@ export default function PeminjamanPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-amber-700 ring-1 ring-inset ring-amber-200">
-                    <span className="material-symbols-outlined icon-fill text-[18px] text-amber-500">hourglass_top</span>
+                  <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-slate-800/80 dark:text-amber-300 dark:ring-amber-500/30">
+                    <span className="material-symbols-outlined icon-fill text-[18px] text-amber-500 dark:text-amber-400">hourglass_top</span>
                     {loan.batasLabel}
                   </span>
-                  <span className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700">
+                  <span className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
                     Menunggu
                   </span>
                 </div>
@@ -341,10 +341,10 @@ export default function PeminjamanPage() {
               return (
                 <GlassCard
                   key={loan.key}
-                  className="flex flex-col gap-4 border border-emerald-200 bg-emerald-50/50 p-5 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-4 border border-emerald-200 bg-emerald-50/50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-500/30 dark:bg-emerald-500/10"
                 >
                   <div className="flex items-center gap-4">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 ring-1 ring-inset ring-emerald-100">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 ring-1 ring-inset ring-emerald-100 dark:bg-slate-800 dark:text-emerald-300 dark:ring-emerald-500/30">
                       <span className="material-symbols-outlined icon-fill text-[26px]">{loan.icon}</span>
                     </span>
                     <div className="flex flex-col">
@@ -353,14 +353,14 @@ export default function PeminjamanPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-gray-900 ring-1 ring-inset ring-emerald-100">
-                      <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-600">date_range</span>
+                    <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-gray-900 ring-1 ring-inset ring-emerald-100 dark:bg-slate-800/80 dark:text-slate-100 dark:ring-emerald-500/30">
+                      <span className="material-symbols-outlined icon-fill text-[18px] text-emerald-600 dark:text-emerald-400">date_range</span>
                       {loan.batasLabel}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleKembali(loan)}
-                      className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100"
+                      className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100 dark:bg-slate-800 dark:text-emerald-300 dark:ring-emerald-500/30 dark:hover:bg-emerald-500/10"
                     >
                       Kembalikan
                     </button>
@@ -381,7 +381,7 @@ export default function PeminjamanPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Cari fasilitas…"
-              className="w-full rounded-xl border border-slate-100 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+              className="w-full rounded-xl border border-slate-100 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -393,7 +393,7 @@ export default function PeminjamanPage() {
                 className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
                   category === cat
                     ? 'bg-emerald-600 text-white'
-                    : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+                    : 'bg-white text-gray-600 ring-1 ring-inset ring-slate-200 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300'
                 }`}
               >
                 {cat}
@@ -403,7 +403,7 @@ export default function PeminjamanPage() {
         </section>
       </ScrollReveal>
 
-      <StaggerGroup key={`${category}-${query}`} as="div" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <StaggerGroup key={`${category}-${query}-${filtered.map((f) => f.key).join('|')}`} as="div" className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((f) => {
           const bermasalah = f.kondisi !== 'Baik';
           const habis = f.jumlahTersedia < 1;
@@ -412,7 +412,7 @@ export default function PeminjamanPage() {
               key={f.key}
               className="flex h-full flex-col items-center gap-4 p-6 text-center transition-transform duration-300 hover:-translate-y-1"
             >
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30">
                 <span className="material-symbols-outlined icon-fill text-[32px]">{f.icon}</span>
               </span>
               <div className="flex flex-col gap-1">
@@ -435,7 +435,7 @@ export default function PeminjamanPage() {
                 type="button"
                 disabled={habis || bermasalah}
                 onClick={() => setPickedFasilitas(f)}
-                className="mt-1 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                className="mt-1 w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-700/60 dark:disabled:text-slate-500"
               >
                 {bermasalah ? f.kondisi : habis ? 'Stok Habis' : 'Ajukan Pinjaman'}
               </button>
@@ -443,7 +443,7 @@ export default function PeminjamanPage() {
           );
         })}
         {filtered.length === 0 && (
-          <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white py-12 text-center text-sm text-gray-400">
+          <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white py-12 text-center text-sm text-gray-400 dark:border-slate-700/70 dark:bg-slate-900">
             Tidak ada fasilitas yang cocok dengan pencarian.
           </div>
         )}
@@ -467,7 +467,7 @@ export default function PeminjamanPage() {
                   rows={3}
                   required
                   placeholder="Contoh: Presentasi tugas Sejarah kelas X IPA 1"
-                  className="w-full resize-none rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="w-full resize-none rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -479,14 +479,14 @@ export default function PeminjamanPage() {
                     onChange={(e) => setTanggalPinjam(e.target.value)}
                     min={new Date().toISOString().slice(0, 10)}
                     required
-                    className="flex-1 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="flex-1 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                   />
                   <input
                     type="time"
                     value={jamPinjam}
                     onChange={(e) => setJamPinjam(e.target.value)}
                     required
-                    className="w-28 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="w-28 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <p className="text-xs text-gray-400">Mulai kapan (tanggal &amp; jam) barang ini Anda butuhkan.</p>
@@ -500,26 +500,26 @@ export default function PeminjamanPage() {
                     onChange={(e) => setTanggalKembali(e.target.value)}
                     min={tanggalPinjam}
                     required
-                    className="flex-1 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="flex-1 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                   />
                   <input
                     type="time"
                     value={jamKembali}
                     onChange={(e) => setJamKembali(e.target.value)}
                     required
-                    className="w-28 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    className="w-28 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <p className="text-xs text-gray-400">Kapan barang harus dikembalikan (tanggal &amp; jam). Lewat batas = keterlambatan.</p>
               </div>
-              <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700 ring-1 ring-inset ring-blue-100">
+              <div className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-700 ring-1 ring-inset ring-blue-100 dark:bg-blue-500/10 dark:text-blue-200 dark:ring-blue-500/30">
                 <span className="font-semibold">Periode pinjam:</span> {tanggalPinjam} {jamPinjam} &rarr; {tanggalKembali} {jamKembali}
               </div>
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setPickedFasilitas(null)}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-slate-50"
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
                 >
                   Batal
                 </button>

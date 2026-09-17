@@ -229,12 +229,12 @@ export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
         </ul>
 
         {/* Footer */}
-        <div className="border-t border-gray-100/80 px-4 pb-6 pt-4">
+        <div className="border-t border-gray-100/80 px-4 pb-6 pt-4 dark:border-slate-800">
           {config.quickLink && (
             <Link
               href={config.quickLink.href}
               onClick={onClose}
-              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-50 py-2.5 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100 transition-colors hover:bg-emerald-100"
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-50 py-2.5 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100 transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30 dark:hover:bg-emerald-500/20"
             >
               <span className="material-symbols-outlined text-[18px]">
                 report
@@ -243,7 +243,7 @@ export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
             </Link>
           )}
 
-          <div className="flex items-center gap-3 rounded-xl bg-white/60 p-3 ring-1 ring-white/60">
+          <div className="flex items-center gap-3 rounded-xl bg-white/60 p-3 ring-1 ring-white/60 dark:ring-slate-700/60">
             <Avatar name={user.name} className="h-10 w-10 text-sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-gray-900">
@@ -267,7 +267,7 @@ export default function Sidebar({ role, mobileOpen, onClose }: SidebarProps) {
               onClose();
               router.push('/login');
             }}
-            className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-500 transition-colors hover:bg-red-50"
+            className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
           >
             <span className="material-symbols-outlined text-[20px]">
               logout
@@ -300,7 +300,7 @@ function NavLink({
       className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
         isActive
           ? 'bg-emerald-500 text-white shadow-md'
-          : 'text-gray-600 hover:bg-white/70 hover:text-gray-900'
+          : 'text-gray-600 hover:bg-white/70 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-100'
       }`}
     >
       <span

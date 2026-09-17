@@ -64,6 +64,108 @@
   }
 }
 
+/* ==========================================================================
+   Dark mode (class strategy — toggled via <html class="dark">).
+   Neutral surfaces & typography flip globally so every existing page stays
+   readable without editing each file. Additive colors (emerald/blue/red…)
+   are intentionally NOT flipped — they keep their accent meaning on dark.
+   ========================================================================== */
+
+/* Smooth 3D-scene-like color swap while the pill is toggled (one frame at a
+   time, transform untouched so framer-motion / reveal animations don't break). */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease,
+    box-shadow 0.35s ease !important;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  @apply bg-slate-950;
+}
+
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #f1f5f9;
+}
+
+.dark ::selection {
+  @apply bg-emerald-500/30 text-emerald-100;
+}
+
+/* Gray / slate type scale — mapped up so "dark-ish" text reads on night bg. */
+.dark .text-gray-900 { color: #f1f5f9; }
+.dark .text-gray-800 { color: #e2e8f0; }
+.dark .text-gray-700 { color: #cbd5e1; }
+.dark .text-gray-600 { color: #94a3b8; }
+.dark .text-gray-500 { color: #94a3b8; }
+.dark .text-gray-400 { color: #64748b; }
+.dark .text-slate-900 { color: #f1f5f9; }
+.dark .text-slate-800 { color: #e2e8f0; }
+.dark .text-slate-700 { color: #cbd5e1; }
+.dark .text-slate-600 { color: #94a3b8; }
+.dark .text-slate-500 { color: #94a3b8; }
+.dark .text-slate-400 { color: #64748b; }
+.dark .text-slate-300 { color: #94a3b8; }
+
+.dark .placeholder-gray-400::placeholder { color: #475569; }
+.dark .placeholder-gray-500::placeholder { color: #475569; }
+
+/* Neutral surface fills */
+.dark .bg-white { background-color: #0f172a; }
+.dark .bg-white\/95 { background-color: rgb(15 23 42 / 0.95); }
+.dark .bg-white\/90 { background-color: rgb(15 23 42 / 0.9); }
+.dark .bg-white\/80 { background-color: rgb(15 23 42 / 0.8); }
+.dark .bg-white\/70 { background-color: rgb(15 23 42 / 0.7); }
+.dark .bg-white\/60 { background-color: rgb(15 23 42 / 0.6); }
+.dark .bg-slate-200 { background-color: #334155; }
+.dark .bg-slate-100 { background-color: #1e293b; }
+.dark .bg-slate-50 { background-color: #0f172a; }
+.dark .bg-slate-50\/70 { background-color: rgb(15 23 42 / 0.7); }
+.dark .bg-slate-50\/60 { background-color: rgb(15 23 42 / 0.6); }
+.dark .bg-gray-100 { background-color: #1e293b; }
+.dark .bg-gray-50 { background-color: #0f172a; }
+
+/* Neutral hairlines & rings */
+.dark .border-white\/40 { border-color: rgb(51 65 85 / 0.6); }
+.dark .border-white\/60 { border-color: rgb(51 65 85 / 0.6); }
+.dark .border-gray-200 { border-color: rgb(51 65 85 / 0.8); }
+.dark .border-gray-100 { border-color: rgb(51 65 85 / 0.8); }
+.dark .border-slate-200 { border-color: rgb(51 65 85 / 0.8); }
+.dark .border-slate-100 { border-color: rgb(51 65 85 / 0.8); }
+.dark .ring-gray-100 { --tw-ring-color: rgb(51 65 85 / 0.6); }
+.dark .ring-gray-200 { --tw-ring-color: rgb(51 65 85 / 0.6); }
+.dark .ring-slate-100 { --tw-ring-color: rgb(51 65 85 / 0.6); }
+.dark .ring-slate-200 { --tw-ring-color: rgb(51 65 85 / 0.6); }
+.dark .ring-slate-300\/80 { --tw-ring-color: rgb(51 65 85 / 0.8); }
+
+/* Dark focus offset so the ring pop stays visible against night bg. */
+.dark :focus-visible {
+  --tw-ring-offset-color: #020617;
+}
+
+/* Dark scrollbar thumb inside scrollbar-thin panels */
+.dark .scrollbar-thin {
+  scrollbar-color: rgb(71 85 105) transparent;
+}
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-700/80;
+}
+
 /* Lenis (landing page only — see SmoothScrollProvider). Lenis tags <html>
    with these classes itself; this just stops the CSS-only `scroll-behavior:
    smooth` above from double-smoothing anchor jumps while it's active. */

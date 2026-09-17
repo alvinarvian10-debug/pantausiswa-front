@@ -3,6 +3,7 @@
 import { Role, useRoleUser } from './Sidebar';
 import Avatar from './Avatar';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 
 interface TopHeaderProps {
   role: Role;
@@ -62,12 +63,14 @@ export default function TopHeader({ role, onMenuClick }: TopHeaderProps) {
         )}
       </div>
 
-      {/* Right: date, notifications, avatar */}
+      {/* Right: date, theme, notifications, avatar */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
         <span className="mr-1 hidden items-center gap-1.5 text-sm font-medium text-gray-500 xl:flex">
           <span className="material-symbols-outlined text-[18px] text-emerald-500">today</span>
           {today}
         </span>
+
+        <ThemeToggle />
 
         <NotificationBell role={role} />
 
