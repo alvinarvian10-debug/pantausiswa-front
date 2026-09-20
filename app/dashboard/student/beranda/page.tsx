@@ -245,7 +245,7 @@ export default function StudentDashboard() {
           </div>
           <div className="flex flex-1 items-center py-4">
             {latestIzin ? (
-              <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 text-center shadow-glass">
+              <div className="relative w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/30 dark:border-slate-700 dark:bg-slate-800">
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-500 shadow-sm ring-1 ring-inset ring-blue-100/60">
                   <span className="material-symbols-outlined icon-fill text-[28px]">
                     {latestIzin.status === 'Menunggu' ? 'pending_actions' : latestIzin.status === 'Disetujui' ? 'check_circle' : 'cancel'}
@@ -289,7 +289,7 @@ export default function StudentDashboard() {
           </div>
           <div className="flex flex-1 items-center py-4">
             {activeLoan ? (
-              <div className="relative w-full overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-6 shadow-glass">
+              <div className="relative w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/30 dark:border-slate-700 dark:bg-slate-800">
                 <div
                   aria-hidden="true"
                   className="absolute -right-4 -top-4 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50"
