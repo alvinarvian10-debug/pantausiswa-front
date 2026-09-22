@@ -133,6 +133,9 @@ export interface Tugas {
   lampiranNama: string | null;
   lampiranLink: string | null;
   deadline: string;
+  tanggalDiberikan?: string | null;
+  jadwalHari?: string | null;
+  jadwalJam?: string | null;
   dibuatPada: string;
 }
 

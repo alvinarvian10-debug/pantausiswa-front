@@ -10,6 +10,9 @@ import {
   apiMyPeminjaman,
   apiMyPresensi,
   apiMyTugas,
+  formatJadwal,
+  formatTanggal,
+  formatTenggat,
   type BackendIzin,
   type BackendPeminjaman,
   type BackendPresensi,
@@ -66,14 +69,16 @@ export default function StudentDashboard() {
           mapel: t.mapel?.nama ?? '-',
           judul: t.judul,
           deskripsi: t.deskripsi,
-          deadline: t.tenggat.slice(0, 10),
+          deadline: t.tenggat,
+          diberikan: formatTanggal(t.tanggalDiberikan),
+          jadwal: formatJadwal(t.jadwalHari, t.jadwalJam),
         }));
     }
     if (!me) return [];
     return tugas
       .filter((t) => t.kelasId === me.kelasId && !submisi.some((s) => s.tugasId === t.id && s.siswaId === CURRENT_SISWA_ID))
       .slice(0, 2)
-      .map((t) => ({ key: `lokal-${t.id}`, mapel: t.mapel, judul: t.judul, deskripsi: t.deskripsi, deadline: t.deadline }));
+      .map((t) => ({ key: `lokal-${t.id}`, mapel: t.mapel, judul: t.judul, deskripsi: t.deskripsi, deadline: t.deadline, diberikan: formatTanggal(t.tanggalDiberikan), jadwal: formatJadwal(t.jadwalHari, t.jadwalJam) }));
   }, [beTugas, tugas, submisi, me]);
 
   const latestIzin = useMemo(() => {
@@ -201,7 +206,9 @@ export default function StudentDashboard() {
           </div>
           <ul className="mt-4 flex flex-col gap-1">
             {tugasAktif.map((t) => {
-              const terlambat = new Date(t.deadline) < new Date(today);
+              const terlambat = /^\d{4}-\d{2}-\d{2}$/.test(t.deadline)
+                ? new Date(t.deadline) < new Date(today)
+                : new Date(t.deadline).getTime() < Date.now();
               return (
                 <li key={t.key}>
                   <Link
@@ -219,10 +226,16 @@ export default function StudentDashboard() {
                             : 'bg-amber-50 text-amber-600 ring-amber-100'
                         }`}
                       >
-                        {t.deadline}
+                        {formatTenggat(t.deadline)}
                       </span>
                     </div>
                     <p className="text-xs leading-relaxed text-gray-500">{t.deskripsi}</p>
+                    {t.diberikan && (
+                      <p className="text-[11px] text-gray-400">Diberikan: {t.diberikan}</p>
+                    )}
+                    {t.jadwal && (
+                      <p className="text-[11px] font-medium text-blue-600">{t.jadwal}</p>
+                    )}
                   </Link>
                 </li>
               );

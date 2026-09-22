@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '../../../../components/GlassCard';
 import ScrollReveal from '../../../../components/ScrollReveal';
 import StaggerGroup from '../../../../components/StaggerGroup';
-import { apiMyTugas, apiSubmitTugas, type BackendTugas } from '../../../../lib/api';
+import { apiMyTugas, apiSubmitTugas, formatJadwal, formatTanggal, formatTenggat, type BackendTugas } from '../../../../lib/api';
 import { CURRENT_SISWA_ID, TipeSubmisi, Tugas, useAppData } from '../../../../lib/store';
 
 export default function TugasPage() {
@@ -43,6 +43,9 @@ export default function TugasPage() {
     lampiranNama: string | null;
     lampiranLink: string | null;
     deadline: string;
+    diberikan: string | null;
+    jadwalHari: string | null;
+    jadwalJam: string | null;
     submisi: {
       status: 'Menunggu Nilai' | 'Dinilai';
       nilai: number | null;
@@ -64,7 +67,10 @@ export default function TugasPage() {
           deskripsi: t.deskripsi,
           lampiranNama: null,
           lampiranLink: t.lampiranUrl,
-          deadline: t.tenggat.slice(0, 10),
+          deadline: t.tenggat,
+          diberikan: t.tanggalDiberikan ?? null,
+          jadwalHari: t.jadwalHari ?? null,
+          jadwalJam: t.jadwalJam ?? null,
           submisi: sub
             ? {
                 status: sub.nilai !== null && sub.nilai !== undefined ? 'Dinilai' : 'Menunggu Nilai',
@@ -90,6 +96,9 @@ export default function TugasPage() {
         lampiranNama: t.lampiranNama,
         lampiranLink: t.lampiranLink,
         deadline: t.deadline,
+        diberikan: t.tanggalDiberikan ?? null,
+        jadwalHari: t.jadwalHari ?? null,
+        jadwalJam: t.jadwalJam ?? null,
         submisi: s
           ? { status: s.status, nilai: s.nilai, feedback: s.feedback, konten: s.konten }
           : null,
@@ -101,7 +110,15 @@ export default function TugasPage() {
 
   const findSubmisi = (key: string) => barisTugas.find((t) => t.key === key)?.submisi ?? null;
 
-  const isTerlambat = (deadline: string) => new Date(deadline) < new Date(new Date().toISOString().slice(0, 10));
+  const isTerlambat = (deadline: string) => {
+    const d = new Date(deadline);
+    if (Number.isNaN(d.getTime())) return false;
+    // Date-only legacy: bandingkan per tanggal; datetime: presisi menit.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+      return deadline < new Date().toISOString().slice(0, 10);
+    }
+    return d.getTime() < Date.now();
+  };
 
   const stats = useMemo(() => {
     let aktif = 0, selesai = 0, lewat = 0;
@@ -248,11 +265,18 @@ export default function TugasPage() {
                     </div>
                     <p className="text-base font-semibold text-gray-900">{t.judul}</p>
                     <p className="text-sm text-gray-500">{t.deskripsi}</p>
+                    <p className="text-xs text-gray-400">Diberikan: {formatTanggal(t.diberikan) ?? '-'}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${terlambat ? 'bg-red-50 text-red-700 ring-red-100' : 'bg-amber-50 text-amber-700 ring-amber-100'}`}>
                         <span className="material-symbols-outlined icon-fill text-[14px]">schedule</span>
-                        {t.deadline}
+                        {formatTenggat(t.deadline)}
                       </span>
+                      {formatJadwal(t.jadwalHari, t.jadwalJam) && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-100">
+                          <span className="material-symbols-outlined icon-fill text-[14px]">calendar_month</span>
+                          {formatJadwal(t.jadwalHari, t.jadwalJam)}
+                        </span>
+                      )}
                       {s?.status === 'Dinilai' && (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100">
                           Nilai: {s.nilai}

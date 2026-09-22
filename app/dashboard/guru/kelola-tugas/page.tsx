@@ -12,12 +12,34 @@ import {
   apiListKelas,
   apiListMapel,
   apiListTugas,
+  formatJadwal,
+  formatTanggal,
+  formatTenggat,
+  HARI_LIST,
+  toBackendTanggalDiberikan,
+  toBackendTenggat,
   type BackendSubmission,
   type BackendTugas,
 } from '../../../../lib/api';
 import { CURRENT_GURU_ID, SubmisiTugas, useAppData, type AvatarTone } from '../../../../lib/store';
 
 type Tab = 'beri' | 'cek';
+
+/** Default deadline: 7 hari ke depan pukul 23:59 waktu lokal (format datetime-local). */
+function defaultDeadlineLocal(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  d.setHours(23, 59, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Default tanggal diberikan: hari ini (format date). */
+function defaultDiberikanLocal(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export default function KelolaTugasPage() {
   const { kelas, guru, tugas, submisi, siswa, getSiswa, buatTugas, nilaiSubmisi, tambahRiwayatGuru } = useAppData();
@@ -96,6 +118,9 @@ export default function KelolaTugasPage() {
     mapel: string;
     judul: string;
     deadline: string;
+    diberikan: string | null;
+    jadwalHari: string | null;
+    jadwalJam: string | null;
   }
 
   const kelasTugas: BarisTugasGuru[] = useMemo(() => {
@@ -107,7 +132,10 @@ export default function KelolaTugasPage() {
           backendId: t.id,
           mapel: t.mapel?.nama ?? '-',
           judul: t.judul,
-          deadline: t.tenggat.slice(0, 10),
+          deadline: t.tenggat,
+          diberikan: t.tanggalDiberikan ?? null,
+          jadwalHari: t.jadwalHari ?? null,
+          jadwalJam: t.jadwalJam ?? null,
         }));
     }
     if (!activeKelas) return [];
@@ -119,6 +147,9 @@ export default function KelolaTugasPage() {
         mapel: t.mapel,
         judul: t.judul,
         deadline: t.deadline,
+        diberikan: t.tanggalDiberikan ?? null,
+        jadwalHari: t.jadwalHari ?? null,
+        jadwalJam: t.jadwalJam ?? null,
       }));
   }, [useBackend, beTugas, activeTab, tugas, activeKelas]);
 
@@ -126,7 +157,10 @@ export default function KelolaTugasPage() {
     mapel: me?.mapel[0] ?? '',
     judul: '',
     deskripsi: '',
-    deadline: new Date().toISOString().slice(0, 10),
+    diberikan: defaultDiberikanLocal(),
+    deadline: defaultDeadlineLocal(),
+    jadwalHari: '',
+    jadwalJam: '',
     lampiranNama: null as string | null,
     lampiranLink: '',
   });
@@ -162,20 +196,35 @@ export default function KelolaTugasPage() {
         if (!kelasMatch) {
           throw new Error(`Kelas "${activeTab}" tidak ada di backend.`);
         }
-        await apiCreateTugas({
+        const saved = await apiCreateTugas({
           judul: form.judul.trim(),
           deskripsi: form.deskripsi.trim(),
           mapelId: mapelMatch.id,
           kelasId: kelasMatch.id,
-          tenggat: form.deadline,
+          tenggat: toBackendTenggat(form.deadline),
+          tanggalDiberikan: toBackendTanggalDiberikan(form.diberikan || defaultDiberikanLocal()),
+          ...(form.jadwalHari ? { jadwalHari: form.jadwalHari } : {}),
+          ...(form.jadwalJam.trim() ? { jadwalJam: form.jadwalJam.trim() } : {}),
           ...(form.lampiranLink.trim()
             ? { lampiranUrl: form.lampiranLink.trim() }
             : {}),
         });
+        // Option A (State Append): tampilkan tugas baru seketika tanpa
+        // menunggu refetch selesai — terasa instant, tanpa hard reload.
+        if (saved) {
+          setBeTugas((prev) => (prev ? [saved, ...prev] : [saved]));
+          setBeSubs((prev) => ({ ...prev, [saved.id]: [] }));
+          const savedKelasNama = saved.kelas?.nama;
+          if (savedKelasNama && savedKelasNama !== activeTab) {
+            setActiveTabState(savedKelasNama);
+          }
+        }
         tambahRiwayatGuru(CURRENT_GURU_ID, 'Membuat tugas', `Membuat tugas baru "${form.judul.trim()}" untuk kelas ${activeTab}`);
+        // Option B (Refetch Trigger): sinkronisasi ulang di background agar
+        // data kanonis (urutan server, relasi, _count) tetap akurat.
         await muatBackend();
         setDbNotice('Tugas tersimpan di backend.');
-        setForm({ mapel: me?.mapel[0] ?? '', judul: '', deskripsi: '', deadline: new Date().toISOString().slice(0, 10), lampiranNama: null, lampiranLink: '' });
+        setForm({ mapel: me?.mapel[0] ?? '', judul: '', deskripsi: '', diberikan: defaultDiberikanLocal(), deadline: defaultDeadlineLocal(), jadwalHari: '', jadwalJam: '', lampiranNama: null, lampiranLink: '' });
       } catch (err) {
         setDbError(
           err instanceof Error
@@ -200,6 +249,9 @@ export default function KelolaTugasPage() {
       lampiranNama: form.lampiranNama,
       lampiranLink: form.lampiranLink.trim() || null,
       deadline: form.deadline,
+      tanggalDiberikan: form.diberikan || defaultDiberikanLocal(),
+      jadwalHari: form.jadwalHari || null,
+      jadwalJam: form.jadwalJam.trim() || null,
     };
     // Simpan ke backend NestJS dulu — backend butuh mapelId & kelasId
     // numerik, jadi cocokkan nama ke daftar backend. Pakai id backend
@@ -231,7 +283,10 @@ export default function KelolaTugasPage() {
         deskripsi: form.deskripsi.trim(),
         mapelId: mapelMatch.id,
         kelasId: kelasMatch.id,
-        tenggat: form.deadline,
+        tenggat: toBackendTenggat(form.deadline),
+        tanggalDiberikan: toBackendTanggalDiberikan(form.diberikan || defaultDiberikanLocal()),
+        ...(form.jadwalHari ? { jadwalHari: form.jadwalHari } : {}),
+        ...(form.jadwalJam.trim() ? { jadwalJam: form.jadwalJam.trim() } : {}),
         ...(form.lampiranLink.trim()
           ? { lampiranUrl: form.lampiranLink.trim() }
           : {}),
@@ -247,7 +302,7 @@ export default function KelolaTugasPage() {
     }
     buatTugas(dbId ? { ...payload, id: dbId } : payload);
     tambahRiwayatGuru(CURRENT_GURU_ID, 'Membuat tugas', `Membuat tugas baru "${form.judul.trim()}" untuk kelas ${activeKelas.nama}`);
-    setForm({ mapel: me?.mapel[0] ?? '', judul: '', deskripsi: '', deadline: new Date().toISOString().slice(0, 10), lampiranNama: null, lampiranLink: '' });
+    setForm({ mapel: me?.mapel[0] ?? '', judul: '', deskripsi: '', diberikan: defaultDiberikanLocal(), deadline: defaultDeadlineLocal(), jadwalHari: '', jadwalJam: '', lampiranNama: null, lampiranLink: '' });
     setSaving(false);
   };
 
@@ -459,11 +514,49 @@ export default function KelolaTugasPage() {
                       </select>
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium text-gray-700">Tenggat Waktu</label>
+                      <label className="text-sm font-medium text-gray-700">Tanggal Diberikan</label>
                       <input
                         type="date"
+                        required
+                        value={form.diberikan}
+                        onChange={(e) => setForm((f) => ({ ...f, diberikan: e.target.value }))}
+                        className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-gray-700">Deadline Pengumpulan</label>
+                      <input
+                        type="datetime-local"
+                        required
                         value={form.deadline}
                         onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
+                        className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                      />
+                      <p className="text-[11px] text-gray-400">Tanggal & jam pasti (WIB). Tersimpan presisi menit.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-gray-700">Hari Pelajaran (opsional)</label>
+                      <select
+                        value={form.jadwalHari}
+                        onChange={(e) => setForm((f) => ({ ...f, jadwalHari: e.target.value }))}
+                        className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                      >
+                        <option value="">— Pilih hari —</option>
+                        {HARI_LIST.map((h) => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-gray-700">Jam Pelajaran (opsional)</label>
+                      <input
+                        type="text"
+                        value={form.jadwalJam}
+                        onChange={(e) => setForm((f) => ({ ...f, jadwalJam: e.target.value }))}
+                        placeholder='Contoh: 07:00 - 08:30'
                         className="w-full rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm text-gray-700 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                       />
                     </div>
@@ -534,7 +627,11 @@ export default function KelolaTugasPage() {
                       <GlassCard key={t.key} className="p-5">
                         <span className="text-xs font-semibold text-emerald-700">{t.mapel}</span>
                         <p className="mt-1 text-sm font-semibold text-gray-900">{t.judul}</p>
-                        <p className="mt-1 text-xs text-gray-500">Tenggat: {t.deadline}</p>
+                        <p className="mt-1 text-xs text-gray-500">Diberikan: {formatTanggal(t.diberikan) ?? '-'}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Deadline: {formatTenggat(t.deadline)}</p>
+                        {formatJadwal(t.jadwalHari, t.jadwalJam) && (
+                          <p className="mt-1 text-xs font-medium text-blue-600">{formatJadwal(t.jadwalHari, t.jadwalJam)}</p>
+                        )}
                       </GlassCard>
                     ))}
                   </StaggerGroup>
@@ -552,6 +649,11 @@ export default function KelolaTugasPage() {
                       <div>
                         <span className="text-xs font-semibold text-emerald-700">{t.mapel}</span>
                         <h3 className="text-base font-semibold text-gray-900">{t.judul}</h3>
+                        <p className="mt-0.5 text-xs text-gray-500">Diberikan: {formatTanggal(t.diberikan) ?? '-'}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Deadline: {formatTenggat(t.deadline)}</p>
+                        {formatJadwal(t.jadwalHari, t.jadwalJam) && (
+                          <p className="mt-0.5 text-xs font-medium text-blue-600">{formatJadwal(t.jadwalHari, t.jadwalJam)}</p>
+                        )}
                       </div>
                       <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 ring-1 ring-inset ring-slate-100">
                         {totalSiswa === null

@@ -289,6 +289,9 @@ export interface BackendTugas {
   mapelId: number;
   kelasId: number;
   tenggat: string;
+  tanggalDiberikan: string | null;
+  jadwalHari: string | null;
+  jadwalJam: string | null;
   lampiranUrl: string | null;
   mapel?: { nama: string; kode: string };
   kelas?: { nama: string };
@@ -348,6 +351,9 @@ export function apiCreateTugas(input: {
   mapelId: number;
   kelasId: number;
   tenggat: string;
+  tanggalDiberikan?: string;
+  jadwalHari?: string;
+  jadwalJam?: string;
   lampiranUrl?: string;
 }) {
   return apiFetch<BackendTugas>('/tugas', {
@@ -355,6 +361,87 @@ export function apiCreateTugas(input: {
     body: JSON.stringify(input),
   });
 }
+
+// ---- Format tampilan Tugas (locale id-ID, zona Asia/Jakarta) ----
+
+const HARI_LIST = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] as const;
+
+/** "2026-09-25T23:59" (datetime-local, WIB) -> "2026-09-25T23:59:00+07:00" agar tak geser di server UTC. */
+export function toBackendTenggat(localValue: string): string {
+  const v = localValue.trim();
+  if (!v) return v;
+  // Sudah ada offset/zona (mis. +07:00 / Z) — teruskan apa adanya.
+  if (/([+-]\d{2}:?\d{2}|Z)$/.test(v)) return v;
+  // datetime-local "YYYY-MM-DDTHH:mm" atau "...THH:mm:ss" -> anggap waktu WIB.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v)) {
+    const withSec = v.length === 16 ? `${v}:00` : v;
+    return `${withSec}+07:00`;
+  }
+  // date-only legacy "YYYY-MM-DD" -> akhir hari WIB agar tak dianggap lewat saat dibuat.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T23:59:00+07:00`;
+  return v;
+}
+
+/** "2026-09-22" (date, WIB) -> "2026-09-22T00:00:00+07:00" (awal hari, tak geser di server UTC). */
+export function toBackendTanggalDiberikan(localValue: string): string {
+  const v = localValue.trim();
+  if (!v) return v;
+  if (/([+-]\d{2}:?\d{2}|Z)$/.test(v)) return v;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T00:00:00+07:00`;
+  return toBackendTenggat(v);
+}
+
+/** ISO datetime -> "Senin, 22 Sep 2026" (tanggal saja, zona Asia/Jakarta). */
+export function formatTanggal(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  }).format(d);
+}
+
+/** "2026-09-25T23:59:00+07:00" -> "Jumat, 25 Sep 2026 • 23:59 WIB" (tahan terhadap format lama date-only). */
+export function formatTenggat(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const tgl = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  }).format(d);
+  // Backend lama hanya menyimpan tanggal (tengah malam UTC = 07:00 WIB):
+  // tampilkan tanggal saja agar tak muncul "07:00" yang membingungkan.
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);
+  if (isDateOnly) return tgl;
+  const jam = new Intl.DateTimeFormat('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Jakarta',
+  })
+    .format(d)
+    .replace('.', ':');
+  return `${tgl} • ${jam} WIB`;
+}
+
+/** (hari, jam) -> "Untuk Pelajaran Hari: Senin, 07:00 - 08:30" atau null bila kosong. */
+export function formatJadwal(hari?: string | null, jam?: string | null): string | null {
+  const h = hari?.trim();
+  const j = jam?.trim();
+  if (!h && !j) return null;
+  if (h && j) return `Untuk Pelajaran Hari: ${h}, ${j} WIB`;
+  if (h) return `Untuk Pelajaran Hari: ${h}`;
+  return `Jam Pelajaran: ${j} WIB`;
+}
+
+export { HARI_LIST };
 
 /** Tugas milik guru yang login. */
 export function apiListTugas() {
