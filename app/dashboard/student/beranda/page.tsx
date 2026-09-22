@@ -22,6 +22,14 @@ import { CURRENT_SISWA_ID, useAppData } from '../../../../lib/store';
 
 const kapital = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
+const STATUS_WARNA: Record<string, string> = {
+  Hadir: 'text-emerald-600',
+  Terlambat: 'text-orange-600',
+  Sakit: 'text-amber-600',
+  Izin: 'text-blue-600',
+  Alpa: 'text-red-600',
+};
+
 export default function StudentDashboard() {
   const { presensi, izin, tugas, submisi, peminjaman, getSiswa, getFasilitas } = useAppData();
   const [now, setNow] = useState<Date | null>(null);
@@ -55,9 +63,12 @@ export default function StudentDashboard() {
     apiMyPeminjaman().then((r) => setBePinjam(r.data)).catch(() => setBePinjam(null));
   }, []);
 
-  const sudahHadir = bePresensi !== null
-    ? bePresensi.some((p) => p.tanggal.slice(0, 10) === today)
-    : presensi.some((p) => p.siswaId === CURRENT_SISWA_ID && p.tanggal === today);
+  const todayRecord: { tanggal: string; status: string } | undefined =
+    bePresensi !== null
+      ? bePresensi.find((p) => p.tanggal.slice(0, 10) === today)
+      : presensi.find((p) => p.siswaId === CURRENT_SISWA_ID && p.tanggal === today);
+
+  const todayStatus = todayRecord ? kapital(todayRecord.status) : null;
 
   const tugasAktif = useMemo(() => {
     if (beTugas !== null) {
@@ -135,13 +146,17 @@ export default function StudentDashboard() {
               </div>
               <h3 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
                 Status Hari Ini:{' '}
-                <span className={sudahHadir ? 'text-emerald-600' : 'text-amber-600'}>
-                  {sudahHadir ? 'Sudah Hadir' : 'Belum Hadir'}
+                <span
+                  className={
+                    todayStatus ? (STATUS_WARNA[todayStatus] ?? 'text-emerald-600') : 'text-amber-600'
+                  }
+                >
+                  {todayStatus ?? 'Belum Hadir'}
                 </span>
               </h3>
               <p className="max-w-md text-sm leading-relaxed text-gray-500">
-                {sudahHadir
-                  ? 'Presensimu hari ini sudah tercatat oleh sekretaris kelas. Semangat belajar!'
+                {todayStatus
+                  ? `Presensimu hari ini dicatat oleh sekretaris kelas dengan status ${todayStatus}.`
                   : 'Presensi kehadiran dikelola oleh sekretaris kelas. Hubungi sekretaris jika ada kesalahan data.'}
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">

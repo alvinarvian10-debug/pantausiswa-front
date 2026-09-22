@@ -113,6 +113,10 @@ export default function PresensiPage() {
     [beIzin, myIzinLokal],
   );
   const alreadyCheckedIn = myPresensi.some((p) => p.tanggal === today);
+  const todayStatus = useMemo(
+    () => myPresensi.find((p) => p.tanggal === today)?.status ?? null,
+    [myPresensi, today],
+  );
 
   const kpi = useMemo(() => {
     const hitung = (s: string) => myPresensi.filter((p) => p.status === s).length;
@@ -238,10 +242,10 @@ export default function PresensiPage() {
             <p className="mt-1 text-sm text-gray-500">
               {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
-            {alreadyCheckedIn ? (
-              <div className="mt-6 flex items-center gap-3 rounded-xl bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+            {alreadyCheckedIn && todayStatus ? (
+              <div className={`mt-6 flex items-center gap-3 rounded-xl px-4 py-4 text-sm font-medium ring-1 ring-inset ${STATUS_BADGE[todayStatus] ?? 'bg-emerald-50 text-emerald-700 ring-emerald-100'}`}>
                 <span className="material-symbols-outlined icon-fill text-[22px]">task_alt</span>
-                Kamu telah check-in hari ini. Semangat belajar!
+                Status kehadiranmu hari ini: {todayStatus}. Presensi dicatat oleh sekretaris kelas.
               </div>
             ) : (
               <button
