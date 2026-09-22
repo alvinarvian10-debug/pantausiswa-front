@@ -28,6 +28,31 @@ const KONDISI_STYLE: Record<string, string> = {
   Diperbaiki: 'bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
 };
 
+const RIWAYAT_CHIP: Record<string, string> = {
+  DIKEMBALIKAN: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30',
+  DITOLAK: 'bg-red-50 text-red-600 ring-red-100 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30',
+  DIBATALKAN: 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-700/60 dark:text-slate-300 dark:ring-slate-600/50',
+  Dikembalikan: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30',
+  Ditolak: 'bg-red-50 text-red-600 ring-red-100 dark:bg-red-500/15 dark:text-red-300 dark:ring-red-500/30',
+};
+
+const RIWAYAT_LABEL: Record<string, string> = {
+  DIKEMBALIKAN: 'Dikembalikan',
+  DITOLAK: 'Ditolak',
+  DIBATALKAN: 'Dibatalkan',
+  Dikembalikan: 'Dikembalikan',
+  Ditolak: 'Ditolak',
+};
+
+/** Chip status read-only untuk item histori (tanpa aksi). */
+function StatusChip({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex w-max rounded-xl px-3 py-2 text-xs font-semibold ring-1 ring-inset ${RIWAYAT_CHIP[status] ?? RIWAYAT_CHIP.DIBATALKAN}`}>
+      {RIWAYAT_LABEL[status] ?? status}
+    </span>
+  );
+}
+
 /** "2026-09-10 08:00" → "2026-09-11 15:00" (jam boleh kosong utk data lama). */
 function labelPeriode(
   tglMulai: string,
@@ -55,16 +80,21 @@ export default function PeminjamanPage() {
   const [dbNotice, setDbNotice] = useState('');
   const [dbError, setDbError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'aktif' | 'riwayat'>('aktif');
 
   // Sumber kebenaran: backend bila terjangkau (stok + riwayat), lokal bila tidak.
   const [beBarang, setBeBarang] = useState<BackendBarang[] | null>(null);
   const [bePinjam, setBePinjam] = useState<BackendPeminjaman[] | null>(null);
 
-  const muatBackend = async () => {
+  const muatBackend = async (tab: 'aktif' | 'riwayat' = activeTab) => {
     try {
-      const [b, p] = await Promise.all([apiListBarang(), apiMyPeminjaman()]);
+      const [b, p] = await Promise.all([
+        apiListBarang(),
+        apiMyPeminjaman(tab === 'aktif' ? 'active' : 'history'),
+      ]);
       setBeBarang(b.length > 0 ? b : null);
-      setBePinjam(p.data.length > 0 ? p.data : null);
+      // Array kosong = data valid (mis. riwayat masih kosong), bukan offline.
+      setBePinjam(p.data);
     } catch {
       setBeBarang(null);
       setBePinjam(null);
@@ -72,8 +102,9 @@ export default function PeminjamanPage() {
   };
 
   useEffect(() => {
-    muatBackend();
-  }, []);
+    muatBackend(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   interface FasilitasView {
     key: string;
@@ -185,6 +216,44 @@ export default function PeminjamanPage() {
       });
   }, [bePinjam, peminjaman, getFasilitas]);
 
+  interface RiwayatView {
+    key: string;
+    nama: string;
+    icon: string;
+    keperluan: string;
+    batasLabel: string;
+    status: string;
+  }
+
+  /** Transaksi selesai (DIKEMBALIKAN/DITOLAK) — read-only, tanpa aksi. */
+  const historyLoans: RiwayatView[] = useMemo(() => {
+    if (bePinjam !== null) {
+      return bePinjam
+        .filter((p) => p.status === 'DIKEMBALIKAN' || p.status === 'DITOLAK')
+        .map((p) => ({
+          key: `be-history-${p.id}`,
+          nama: p.barang?.nama ?? '-',
+          icon: p.barang?.icon ?? 'inventory_2',
+          keperluan: p.catatan ?? '',
+          batasLabel: labelPeriode(p.tanggalPinjam, p.jamPinjam, p.tanggalKembali, p.jamKembali),
+          status: p.status,
+        }));
+    }
+    return peminjaman
+      .filter((p) => p.siswaId === CURRENT_SISWA_ID && (p.status === 'Dikembalikan' || p.status === 'Ditolak'))
+      .map((p) => {
+        const f = getFasilitas(p.fasilitasId);
+        return {
+          key: `lokal-history-${p.id}`,
+          nama: f?.nama ?? '-',
+          icon: f?.icon ?? 'inventory_2',
+          keperluan: p.keperluan,
+          batasLabel: labelPeriode(p.tanggalPinjam, null, p.batasKembali, null),
+          status: p.status,
+        };
+      });
+  }, [bePinjam, peminjaman, getFasilitas]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return daftarFasilitas.filter((f) => {
@@ -231,7 +300,8 @@ export default function PeminjamanPage() {
           batasKembali: `${tanggalKembali}T23:59:59`,
         });
       }
-      await muatBackend();
+      await muatBackend('aktif');
+      if (activeTab !== 'aktif') setActiveTab('aktif');
       setDbNotice(`Pengajuan "${fasilitasDipilih.nama}" tercatat (menunggu persetujuan admin). Stok akan berkurang setelah disetujui.`);
       setPickedFasilitas(null);
       setKeperluan('');
@@ -256,7 +326,7 @@ export default function PeminjamanPage() {
     if (loan.backendId !== null) {
       try {
         await apiKembalikanMandiri(loan.backendId);
-        await muatBackend();
+        await muatBackend(activeTab);
         setDbNotice('Pengembalian tercatat di backend. Terima kasih!');
       } catch (err) {
         setDbError(
@@ -299,7 +369,26 @@ export default function PeminjamanPage() {
         </div>
       )}
 
-      {pendingLoans.length > 0 && (
+      <div className="flex gap-6 border-b border-slate-200 dark:border-slate-700" role="tablist" aria-label="Peminjaman aktif dan riwayat">
+        {(['aktif', 'riwayat'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            onClick={() => setActiveTab(tab)}
+            className={`-mb-px pb-3 text-sm font-semibold transition-colors ${
+              activeTab === tab
+                ? 'border-b-2 border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                : 'border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-300'
+            }`}
+          >
+            {tab === 'aktif' ? 'Peminjaman Aktif' : 'Riwayat'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'aktif' && pendingLoans.length > 0 && (
         <ScrollReveal delay={0.04}>
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-500">
@@ -334,7 +423,7 @@ export default function PeminjamanPage() {
         </ScrollReveal>
       )}
 
-      {myLoans.length > 0 && (
+      {activeTab === 'aktif' && myLoans.length > 0 && (
         <ScrollReveal delay={0.05}>
           <section className="flex flex-col gap-3">
             {myLoans.map((loan) => {
@@ -368,6 +457,39 @@ export default function PeminjamanPage() {
                 </GlassCard>
               );
             })}
+          </section>
+        </ScrollReveal>
+      )}
+
+      {activeTab === 'riwayat' && (
+        <ScrollReveal delay={0.05}>
+          <section className="flex flex-col gap-3" role="tabpanel" aria-label="Riwayat peminjaman">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
+              Riwayat Peminjaman ({historyLoans.length})
+            </h2>
+            {historyLoans.map((h) => (
+              <GlassCard
+                key={h.key}
+                className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                    <span className="material-symbols-outlined icon-fill text-[26px]">{h.icon}</span>
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{h.nama}</span>
+                    <span className="text-xs font-medium text-gray-500">{h.keperluan}</span>
+                    <span className="text-xs text-gray-400">{h.batasLabel}</span>
+                  </div>
+                </div>
+                <StatusChip status={h.status} />
+              </GlassCard>
+            ))}
+            {historyLoans.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-12 text-center text-sm text-gray-400 dark:border-slate-700/70 dark:bg-slate-900">
+                Belum ada riwayat peminjaman yang selesai.
+              </div>
+            )}
           </section>
         </ScrollReveal>
       )}

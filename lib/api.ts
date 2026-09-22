@@ -574,14 +574,25 @@ export function apiCreatePeminjaman(input: {
   });
 }
 
-/** Riwayat peminjaman milik siswa yang login. */
-export function apiMyPeminjaman() {
-  return apiFetch<{ data: BackendPeminjaman[] }>('/peminjaman/me');
+/** Riwayat peminjaman milik siswa yang login (?type=active|history opsional). */
+export function apiMyPeminjaman(type?: 'active' | 'history') {
+  const q = type ? `?type=${encodeURIComponent(type)}` : '';
+  return apiFetch<{ data: BackendPeminjaman[] }>(`/peminjaman/me${q}`);
 }
 
-/** Semua peminjaman (admin, filter status opsional). */
-export function apiListPeminjaman(status?: string) {
-  const q = status ? `?status=${encodeURIComponent(status)}` : '';
+/** Semua peminjaman (admin, filter status dan/atau type=active|history opsional). */
+export function apiListPeminjaman(status?: string, type?: 'active' | 'history') {
+  const params = new URLSearchParams();
+  // Kompatibel: pemanggil lama bisa mengirim 'active'/'history' via argumen pertama.
+  let effectiveStatus = status;
+  let effectiveType = type;
+  if (!effectiveType && (status === 'active' || status === 'history')) {
+    effectiveType = status as 'active' | 'history';
+    effectiveStatus = undefined;
+  }
+  if (effectiveStatus) params.set('status', effectiveStatus);
+  if (effectiveType) params.set('type', effectiveType);
+  const q = params.toString() ? `?${params.toString()}` : '';
   return apiFetch<{ data: BackendPeminjaman[] }>(`/peminjaman${q}`);
 }
 
