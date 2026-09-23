@@ -19,10 +19,6 @@
 // Proxy same-origin (cookie HttpOnly ikut otomatis terkirim).
 export const API_BASE = '/api/be';
 
-// Alamat backend langsung — hanya untuk health-check (ping).
-const BACKEND_DIRECT =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
-
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -82,20 +78,19 @@ export function apiMe() {
 }
 
 /**
- * Cek backend terjangkau atau tidak. GET /auth/me tanpa token tetap
- * membalas 401 bila server hidup — itu cukup sebagai bukti online.
- * Timeout + network error = offline.
+ * Cek backend terjangkau atau tidak via proxy same-origin.
+ * Backend hidup + tanpa token -> proxy meneruskan 401 (cukup bukti online).
+ * Backend mati -> proxy membalas 502/network error -> offline.
  */
 export async function pingBackend(timeoutMs = 4000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    // Langsung ke backend (bukan proxy) agar yang dicek backend itu sendiri.
-    await fetch(`${BACKEND_DIRECT}/auth/me`, {
+    const res = await fetch(`${API_BASE}/auth/me`, {
       signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json' },
     });
-    return true;
+    return res.status === 401 || res.ok;
   } catch {
     return false;
   } finally {
